@@ -279,6 +279,7 @@ model PaperUpload {
   draftQuestions DraftQuestion[]
   createdAt     DateTime        @default(now())
   @@index([ownerId, status])
+  @@index([examId])
 }
 
 model DraftQuestion {
@@ -311,6 +312,8 @@ model ProcessingJob {
   results       ExtractionResult[]
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+  @@index([paperUploadId])
+  @@index([status])
 }
 
 model ExtractionResult {
@@ -322,6 +325,7 @@ model ExtractionResult {
   warnings   String?       // JSON
   confidence Float?
   createdAt  DateTime      @default(now())
+  @@index([jobId])
 }
 
 model ExamAttempt {
@@ -342,6 +346,8 @@ model ExamAttempt {
   updatedAt      DateTime        @updatedAt
   @@index([userId, examId])
   @@index([versionId])
+  @@index([status])
+  @@index([examId])
 }
 
 model AttemptAnswer {
@@ -388,6 +394,10 @@ model Report {
   status      ReportStatus @default(OPEN)
   createdAt   DateTime     @default(now())
   @@index([status])
+  @@index([examId])
+  @@index([questionId])
+  @@index([reporterId])
+  @@index([examId, status])
 }
 
 model Bookmark {
