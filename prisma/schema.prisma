@@ -1,0 +1,386 @@
+// PracticeHub Prisma schema — Phase 3: Exam Engine
+// NOTE: SQLite for local dev; switch to postgresql for prod (see ARCHITECTURE.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  UPLOADER
+  MODERATOR
+  ADMIN
+}
+
+enum Visibility {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+}
+
+enum UploadStatus {
+  UPLOADED
+  PROCESSING
+  OCR_PROCESSING
+  EXTRACTING
+  REVIEW_REQUIRED
+  READY
+  FAILED
+  PUBLISHED
+}
+
+enum AttemptStatus {
+  CREATED
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+  ABANDONED
+}
+
+enum QuestionState {
+  NOT_VISITED
+  NOT_ANSWERED
+  ANSWERED
+  MARKED
+  ANSWERED_MARKED
+}
+
+enum QuestionType {
+  SCQ
+  MCQ
+  NUMERIC
+  TRUE_FALSE
+  PASSAGE
+  IMAGE_BASED
+}
+
+enum ReportType {
+  WRONG_QUESTION
+  WRONG_ANSWER
+  BROKEN_IMAGE
+  FORMATTING
+  DUPLICATE
+  WRONG_EXPLANATION
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String?
+  email         String        @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role          @default(STUDENT)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  exams         Exam[]        @relation("UserExams")
+  uploads       PaperUpload[]
+  attempts      ExamAttempt[]
+  reports       Report[]
+  bookmarks     Bookmark[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+model Organization {
+  id        String @id @default(cuid())
+  name      String @unique
+  slug      String @unique
+  exams     Exam[]
+  createdAt DateTime @default(now())
+}
+
+model Exam {
+  id               String        @id @default(cuid())
+  slug             String        @unique
+  title            String
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id])
+  ownerId          String
+  owner            User          @relation("UserExams", fields: [ownerId], references: [id])
+  visibility       Visibility    @default(PRIVATE)
+  isPublished      Boolean       @default(false)
+  currentVersionId String?       @unique
+  currentVersion   ExamVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  versions         ExamVersion[] @relation("ExamVersions")
+  uploads          PaperUpload[]
+  reports          Report[]
+  bookmarks        Bookmark[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  @@index([organizationId, isPublished])
+  @@index([ownerId])
+}
+
+model ExamVersion {
+  id           String        @id @default(cuid())
+  examId       String
+  exam         Exam          @relation("ExamVersions", fields: [examId], references: [id], onDelete: Cascade)
+  version      Int
+  config       String        // JSON stringified ExamConfig (validated by Zod)
+  instructions String?       // JSON or markdown
+  sections     ExamSection[]
+  attempts     ExamAttempt[]
+  createdAt    DateTime      @default(now())
+  currentFor   Exam?         @relation("CurrentVersion")
+  @@unique([examId, version])
+  @@index([examId])
+}
+
+model ExamSection {
+  id          String    @id @default(cuid())
+  versionId   String
+  version     ExamVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  name        String
+  order       Int
+  durationSec Int?
+  questions   Question[]
+  @@index([versionId, order])
+}
+
+model Question {
+  id            String                @id @default(cuid())
+  sectionId     String
+  section       ExamSection           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  type          QuestionType          @default(SCQ)
+  order         Int
+  text          String
+  explanation   String?
+  marks         Float                 @default(1)
+  negativeMarks Float                 @default(0)
+  isBonus       Boolean               @default(false)
+  isCancelled   Boolean               @default(false)
+  parentId      String?
+  parent        Question?             @relation("Passage", fields: [parentId], references: [id])
+  children      Question[]            @relation("Passage")
+  translations  QuestionTranslation[]
+  options       QuestionOption[]
+  assets        QuestionAsset[]
+  answer        Answer?
+  topics        QuestionTopic[]
+  attemptAnswers AttemptAnswer[]
+  reports       Report[]
+  @@index([sectionId, order])
+}
+
+model QuestionTranslation {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  locale     String
+  text       String
+  @@unique([questionId, locale])
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  label      String
+  order      Int
+  text       String
+  isCorrect  Boolean  @default(false)
+  @@index([questionId, order])
+}
+
+model QuestionAsset {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  url        String
+  type       String
+  alt        String?
+  order      Int      @default(0)
+}
+
+model Answer {
+  id                String   @id @default(cuid())
+  questionId        String   @unique
+  question          Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  correctOptionId   String?
+  correctOptionIds  String   @default("[]") // JSON array string for MCQ
+  numericAnswer     Float?
+  explanation       String?
+}
+
+model Topic {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  subject   String
+  questions QuestionTopic[]
+}
+
+model QuestionTopic {
+  questionId String
+  topicId    String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  topic      Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  @@id([questionId, topicId])
+}
+
+model PaperUpload {
+  id        String          @id @default(cuid())
+  ownerId   String
+  owner     User            @relation(fields: [ownerId], references: [id])
+  examId    String?
+  exam      Exam?           @relation(fields: [examId], references: [id])
+  fileKey   String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  status    UploadStatus    @default(UPLOADED)
+  source    String?
+  jobs      ProcessingJob[]
+  createdAt DateTime        @default(now())
+  @@index([ownerId, status])
+}
+
+model ProcessingJob {
+  id            String             @id @default(cuid())
+  paperUploadId String
+  paperUpload   PaperUpload        @relation(fields: [paperUploadId], references: [id], onDelete: Cascade)
+  status        UploadStatus       @default(PROCESSING)
+  attempts      Int                @default(0)
+  logs          String             @default("[]") // JSON array string
+  failedReason  String?
+  results       ExtractionResult[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model ExtractionResult {
+  id         String        @id @default(cuid())
+  jobId      String
+  job        ProcessingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  raw        String?       // JSON
+  structured String?       // JSON
+  warnings   String?       // JSON
+  confidence Float?
+  createdAt  DateTime      @default(now())
+}
+
+model ExamAttempt {
+  id             String          @id @default(cuid())
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id])
+  examId         String
+  versionId      String
+  version        ExamVersion     @relation(fields: [versionId], references: [id])
+  status         AttemptStatus   @default(CREATED)
+  startedAt      DateTime        @default(now())
+  expiresAt      DateTime
+  submittedAt    DateTime?
+  idempotencyKey String?         @unique
+  answers        AttemptAnswer[]
+  result         ExamResult?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  @@index([userId, examId])
+  @@index([versionId])
+}
+
+model AttemptAnswer {
+  id               String        @id @default(cuid())
+  attemptId        String
+  attempt          ExamAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId String?
+  state            QuestionState @default(NOT_VISITED)
+  timeSpentMs      Int           @default(0)
+  updatedAt        DateTime      @updatedAt
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+model ExamResult {
+  id          String      @id @default(cuid())
+  attemptId   String      @unique
+  attempt     ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  score       Float
+  maxScore    Float
+  percentage  Float
+  correct     Int
+  incorrect   Int
+  attempted   Int
+  unattempted Int
+  negative    Float
+  timeTakenMs Int
+  sectionWise String      // JSON
+  createdAt   DateTime    @default(now())
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  reporterId  String
+  reporter    User         @relation(fields: [reporterId], references: [id])
+  examId      String?
+  exam        Exam?        @relation(fields: [examId], references: [id])
+  questionId  String?
+  question    Question?    @relation(fields: [questionId], references: [id])
+  type        ReportType
+  description String
+  status      ReportStatus @default(OPEN)
+  createdAt   DateTime     @default(now())
+  @@index([status])
+}
+
+model Bookmark {
+  userId    String
+  examId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([userId, examId])
+}
+
+// Legacy placeholder — remove after verification
+model MigrationCheck {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  note      String?
+}
