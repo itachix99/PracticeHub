@@ -264,20 +264,40 @@ model QuestionTopic {
 }
 
 model PaperUpload {
-  id        String          @id @default(cuid())
-  ownerId   String
-  owner     User            @relation(fields: [ownerId], references: [id])
-  examId    String?
-  exam      Exam?           @relation(fields: [examId], references: [id])
-  fileKey   String
-  fileName  String
-  mimeType  String
-  sizeBytes Int
-  status    UploadStatus    @default(UPLOADED)
-  source    String?
-  jobs      ProcessingJob[]
-  createdAt DateTime        @default(now())
+  id            String          @id @default(cuid())
+  ownerId       String
+  owner         User            @relation(fields: [ownerId], references: [id])
+  examId        String?
+  exam          Exam?           @relation(fields: [examId], references: [id])
+  fileKey       String
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  status        UploadStatus    @default(UPLOADED)
+  source        String?
+  jobs          ProcessingJob[]
+  draftQuestions DraftQuestion[]
+  createdAt     DateTime        @default(now())
   @@index([ownerId, status])
+}
+
+model DraftQuestion {
+  id                 String      @id @default(cuid())
+  paperUploadId      String
+  paperUpload        PaperUpload @relation(fields: [paperUploadId], references: [id], onDelete: Cascade)
+  order              Int
+  text               String
+  type               QuestionType @default(SCQ)
+  options            String      @default("[]") // JSON: [{label,text}]
+  correctOptionLabel String?
+  explanation        String?
+  marks              Float       @default(1)
+  needsReview        Boolean     @default(false)
+  status             String      @default("DRAFT") // DRAFT | APPROVED | REJECTED
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  @@index([paperUploadId, order])
+  @@index([paperUploadId, status])
 }
 
 model ProcessingJob {

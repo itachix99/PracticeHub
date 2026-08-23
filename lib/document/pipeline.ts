@@ -108,7 +108,7 @@ export async function runExtractionJob(jobId: string): Promise<void> {
     let aiProvider: "openai" | "anthropic" | "mock" = "mock";
     let questionCount = 0;
     let aiNeedsReview = true;
-    let aiQuestions: Array<{ text: string; type: string; options: Array<{ label: string; text: string }>; correctOptionLabel?: string }> = [];
+    let aiQuestions: Array<{ text: string; type: string; options: Array<{ label: string; text: string }>; correctOptionLabel?: string; explanation?: string; marks?: number }> = [];
     let aiWarnings: string[] | undefined;
 
     if (output.fullText.trim().length >= 20) {
@@ -201,6 +201,38 @@ export async function runExtractionJob(jobId: string): Promise<void> {
         confidence,
       },
     });
+
+    // Phase 11: create DraftQuestions from AI output
+    if (aiQuestions.length > 0) {
+      try {
+        await prisma.draftQuestion.deleteMany({ where: { paperUploadId: job.paperUploadId } });
+        for (let i = 0; i < aiQuestions.length; i++) {
+          const q = aiQuestions[i]!;
+          // Map type string to Prisma enum (fallback SCQ)
+          const type = (["SCQ","MCQ","NUMERIC","TRUE_FALSE","PASSAGE","IMAGE_BASED"] as const).includes(q.type as never) ? q.type : "SCQ";
+          await prisma.draftQuestion.create({
+            data: {
+              paperUploadId: job.paperUploadId,
+              order: i + 1,
+              text: q.text.slice(0, 4000),
+              type: type as never,
+              options: JSON.stringify(q.options ?? []),
+              correctOptionLabel: q.correctOptionLabel ?? null,
+              explanation: q.explanation ?? null,
+              marks: typeof q.marks === "number" ? q.marks : 1,
+              needsReview: aiNeedsReview || (q.options.length === 0 && q.type !== "NUMERIC"),
+              status: "DRAFT",
+            },
+          });
+        }
+        pushLog(logs, "info", `Created ${aiQuestions.length} draft questions for review`);
+      } catch (draftErr) {
+        const msg = draftErr instanceof Error ? draftErr.message : String(draftErr);
+        pushLog(logs, "warn", `Failed to create drafts: ${msg}`);
+      }
+    } else {
+      pushLog(logs, "warn", `No questions for drafts - check AI output`);
+    }
 
     if (output.needsOcr) {
       pushLog(logs, "warn", "Still low text density after OCR - flagged for review");

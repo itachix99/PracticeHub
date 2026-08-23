@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Clock, AlertCircle, CheckCircle2, Eye } from "lucide-react";
+import Link from "next/link";
+import { Upload, FileText, Clock, AlertCircle, CheckCircle2, Eye, Pencil } from "lucide-react";
 
 interface ExtractionResult {
   id: string;
@@ -169,6 +170,7 @@ export function UploadManager() {
                     <div className="flex items-center gap-2 shrink-0">
                       <Badge variant={u.status === "UPLOADED" || u.status === "PROCESSING" || u.status === "EXTRACTING" || u.status === "OCR_PROCESSING" || u.status === "AI_EXTRACTING" ? "secondary" : u.status === "FAILED" ? "destructive" : u.status === "REVIEW_REQUIRED" ? "outline" : "default"}>{u.status}</Badge>
                       <Badge variant="outline">{u.id.slice(0, 8)}</Badge>
+                      {raw?.questionCount != null && raw.questionCount>0 && <Link href={`/dashboard/uploads/${u.id}/review`}><Button size="sm" variant="default" className="gap-1"><Pencil className="size-3"/>Review ({raw.questionCount})</Button></Link>}
                       <Button size="sm" variant="ghost" onClick={() => setExpanded(isExpanded ? null : u.id)}><Eye className="size-4" />{isExpanded ? "Hide" : "Details"}</Button>
                     </div>
                   </div>
