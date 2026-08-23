@@ -11,6 +11,9 @@ const envSchema = z.object({
   AZURE_DI_ENDPOINT: z.string().optional(),
   AZURE_DI_KEY: z.string().optional(),
   AZURE_DI_ENABLED: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  AI_PROVIDER: z.enum(["openai","anthropic","mock"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

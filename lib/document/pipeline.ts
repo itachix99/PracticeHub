@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { getFileBuffer } from "../storage";
 import { extractPdfText, type ExtractionOutput } from "./extract";
 import { ocrPdfPagesWithFallback } from "./ocr";
+import { extractQuestionsFromText } from "./ai-extract";
 
 type LogEntry = { ts: string; level: "info" | "warn" | "error"; msg: string };
 
@@ -25,7 +26,7 @@ export async function runExtractionJob(jobId: string): Promise<void> {
   if (!job) throw new Error(`Job ${jobId} not found`);
 
   const logs = parseLogs(job.logs);
-  pushLog(logs, "info", "Starting text extraction (Phase 8+9)");
+  pushLog(logs, "info", "Starting text extraction (Phase 8-10)");
 
   await prisma.processingJob.update({
     where: { id: jobId },
@@ -54,7 +55,6 @@ export async function runExtractionJob(jobId: string): Promise<void> {
     const pagesNeedingOcr = output.pages.filter((p) => !p.hasText).map((p) => p.pageNumber);
 
     if (output.needsOcr || pagesNeedingOcr.length > 0) {
-      // If any page needs OCR, run OCR for those pages
       const toOcr = pagesNeedingOcr.length > 0 ? pagesNeedingOcr : output.pages.map((p) => p.pageNumber);
       pushLog(logs, "info", `Low text density detected - starting OCR for ${toOcr.length} page(s)`);
       await prisma.processingJob.update({
@@ -71,7 +71,6 @@ export async function runExtractionJob(jobId: string): Promise<void> {
           pushLog(logs, level, msg)
         );
         ocrProvider = provider;
-        // Merge OCR results into output
         let mergedChars = 0;
         let mergedWithText = 0;
         for (const page of output.pages) {
@@ -85,7 +84,6 @@ export async function runExtractionJob(jobId: string): Promise<void> {
             }
           }
         }
-        // Recompute stats
         for (const p of output.pages) {
           mergedChars += p.charCount;
           if (p.hasText) mergedWithText++;
@@ -106,6 +104,45 @@ export async function runExtractionJob(jobId: string): Promise<void> {
       }
     }
 
+    // Phase 10: AI question extraction
+    let aiProvider: "openai" | "anthropic" | "mock" = "mock";
+    let questionCount = 0;
+    let aiNeedsReview = true;
+    let aiQuestions: Array<{ text: string; type: string; options: Array<{ label: string; text: string }>; correctOptionLabel?: string }> = [];
+    let aiWarnings: string[] | undefined;
+
+    if (output.fullText.trim().length >= 20) {
+      pushLog(logs, "info", `Starting AI question extraction for ${output.fullText.length} chars`);
+      await prisma.processingJob.update({
+        where: { id: jobId },
+        data: { status: "AI_EXTRACTING", logs: JSON.stringify(logs) },
+      });
+      await prisma.paperUpload.update({
+        where: { id: job.paperUploadId },
+        data: { status: "AI_EXTRACTING" },
+      });
+
+      try {
+        const aiResult = await extractQuestionsFromText(output.fullText, {
+          onLog: (msg, level = "info") => pushLog(logs, level, msg),
+        });
+        aiProvider = aiResult.provider;
+        questionCount = aiResult.questionCount;
+        aiNeedsReview = aiResult.needsReview;
+        aiQuestions = aiResult.questions;
+        aiWarnings = aiResult.warnings;
+        pushLog(logs, "info", `AI extraction (${aiProvider}) found ${questionCount} question(s), needsReview=${aiNeedsReview}`);
+        if (aiWarnings?.length) pushLog(logs, "warn", `AI warnings: ${aiWarnings.join("; ")}`);
+      } catch (aiErr) {
+        const msg = aiErr instanceof Error ? aiErr.message : String(aiErr);
+        pushLog(logs, "warn", `AI extraction failed: ${msg} - storing text only`);
+        aiWarnings = [`AI failed: ${msg}`];
+      }
+    } else {
+      pushLog(logs, "warn", `Skipping AI extraction - text too short (${output.fullText.length} chars)`);
+      aiWarnings = ["Text too short for AI extraction"];
+    }
+
     const raw = JSON.stringify({
       totalPages: output.totalPages,
       avgCharsPerPage: output.avgCharsPerPage,
@@ -113,6 +150,9 @@ export async function runExtractionJob(jobId: string): Promise<void> {
       needsOcr: output.needsOcr,
       ocrProvider,
       ocrApplied,
+      aiProvider,
+      questionCount,
+      aiNeedsReview,
       meta: output.meta,
       pages: output.pages.map((p) => ({
         pageNumber: p.pageNumber,
@@ -133,6 +173,11 @@ export async function runExtractionJob(jobId: string): Promise<void> {
         charCount: p.charCount,
         hasText: p.hasText,
       })),
+      questions: aiQuestions,
+      questionCount,
+      aiProvider,
+      aiNeedsReview,
+      aiWarnings,
     });
 
     let warnings: string | null = null;
@@ -140,9 +185,12 @@ export async function runExtractionJob(jobId: string): Promise<void> {
     if (output.needsOcr) w.push("Low text density - still needs review after OCR");
     if (ocrApplied) w.push(`OCR applied via ${ocrProvider}`);
     else if (pagesNeedingOcr.length > 0 && !ocrApplied) w.push("OCR attempted but no text recovered - scanned PDF may need manual review");
+    if (aiWarnings?.length) w.push(...aiWarnings);
+    if (aiNeedsReview && questionCount > 0) w.push("AI flagged needsReview - verify questions");
+    if (questionCount === 0) w.push("No questions extracted - needs manual review");
     if (w.length > 0) warnings = JSON.stringify(w);
 
-    const confidence = Math.min(1, output.textCoverage * 0.8 + Math.min(0.2, output.avgCharsPerPage / 2000) + (ocrApplied ? 0.05 : 0));
+    const confidence = Math.min(1, output.textCoverage * 0.8 + Math.min(0.2, output.avgCharsPerPage / 2000) + (ocrApplied ? 0.05 : 0) + (questionCount > 0 && !aiNeedsReview ? 0.05 : 0));
 
     await prisma.extractionResult.create({
       data: {
@@ -156,10 +204,10 @@ export async function runExtractionJob(jobId: string): Promise<void> {
 
     if (output.needsOcr) {
       pushLog(logs, "warn", "Still low text density after OCR - flagged for review");
-    } else if (ocrApplied) {
-      pushLog(logs, "info", `OCR success (${ocrProvider}) - ready for review`);
+    } else if (aiNeedsReview || questionCount === 0) {
+      pushLog(logs, "warn", `AI extraction needs review (${questionCount} questions) - ready for correction`);
     } else {
-      pushLog(logs, "info", "Text extraction complete - ready for review");
+      pushLog(logs, "info", `Extraction complete: ${questionCount} questions via ${aiProvider} - ready for review`);
     }
 
     await prisma.processingJob.update({
