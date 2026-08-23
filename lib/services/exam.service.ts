@@ -82,12 +82,76 @@ export async function createExamWithVersion(params: {
   });
 }
 
-export async function getPublishedExams() {
-  return prisma.exam.findMany({
-    where: { isPublished: true, visibility: "PUBLIC" },
-    include: { organization: true, currentVersion: { include: { sections: { include: { questions: { include: { options: true } } } } } } },
-    orderBy: { createdAt: "desc" },
-  });
+export interface PublishedExamsFilters {
+  q?: string;
+  organization?: string; // slug or id or name
+  sort?: "latest" | "oldest" | "title" | "popular";
+  page?: number;
+  limit?: number;
+}
+
+export async function getPublishedExams(filters: PublishedExamsFilters = {}) {
+  const { q, organization, sort = "latest", page = 1, limit = 9 } = filters;
+  const take = Math.min(50, Math.max(1, limit));
+  const currentPage = Math.max(1, page);
+  const skip = (currentPage - 1) * take;
+
+  const where: Record<string, unknown> = {
+    isPublished: true,
+    visibility: "PUBLIC",
+  };
+
+  if (q && q.trim()) {
+    const term = q.trim();
+    // For SQLite, contains is case-sensitive but we handle both lower/upper via OR with lower? Simpler: use contains without mode (Prisma handles)
+    // Use OR for title/slug contains
+    (where as Record<string, unknown>).OR = [
+      { title: { contains: term } },
+      { slug: { contains: term } },
+    ];
+  }
+
+  if (organization && organization.trim()) {
+    const org = organization.trim();
+    // Try to match organization slug, id, or name
+    const orgRecord = await prisma.organization.findFirst({
+      where: { OR: [{ slug: org }, { id: org }, { name: org }] },
+    });
+    if (orgRecord) {
+      where.organizationId = orgRecord.id;
+    } else {
+      // If no org found, fallback to slug contains
+      where.organization = { slug: { contains: org } };
+    }
+  }
+
+  let orderBy: Record<string, string> = { createdAt: "desc" };
+  if (sort === "oldest") orderBy = { createdAt: "asc" };
+  else if (sort === "title") orderBy = { title: "asc" };
+  else if (sort === "popular") orderBy = { createdAt: "desc" }; // TODO: sort by attempts count when available
+
+  const [total, exams] = await Promise.all([
+    prisma.exam.count({ where: where as never }),
+    prisma.exam.findMany({
+      where: where as never,
+      include: {
+        organization: true,
+        currentVersion: { include: { sections: { include: { questions: { include: { options: true } } } } } },
+      },
+      orderBy,
+      skip,
+      take,
+    }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / take));
+  return { exams, total, page: currentPage, limit: take, totalPages };
+}
+
+export async function getPublishedExamsSimple() {
+  // Backwards compat for callers expecting array
+  const res = await getPublishedExams({ limit: 100 });
+  return res.exams;
 }
 
 export async function getExamBySlug(slug: string) {
@@ -102,4 +166,8 @@ export async function getExamBySlug(slug: string) {
       },
     },
   });
+}
+
+export async function getOrganizations() {
+  return prisma.organization.findMany({ orderBy: { name: "asc" } });
 }
