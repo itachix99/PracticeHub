@@ -25,6 +25,9 @@ dist
 *.db
 prisma/*.db
 
+# storage - local dev uploads (ignore root storage, keep lib/storage code)
+/storage/
+
 # logs
 npm-debug.log*
 yarn-debug.log*
