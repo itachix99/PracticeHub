@@ -1,12 +1,13 @@
 "use client";
 import * as React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, CheckCircle2, Save, Trash2, Plus, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, CheckCircle2, Save, Trash2, Plus, Eye, EyeOff, UploadCloud, ExternalLink } from "lucide-react";
 
 interface DraftOption { label: string; text: string }
 interface DraftQuestion {
@@ -25,7 +26,7 @@ interface DraftQuestion {
 interface ReviewStudioProps {
   uploadId: string;
   initialDrafts: DraftQuestion[];
-  upload: { fileName: string; status: string };
+  upload: { fileName: string; status: string; examId?: string | null };
 }
 
 export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioProps) {
@@ -34,6 +35,11 @@ export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioPr
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
   const [filterNeedsReview, setFilterNeedsReview] = React.useState(false);
+  const [publishTitle, setPublishTitle] = React.useState(upload.fileName.replace(/\\.pdf$/i, "").replace(/[-_]/g, " "));
+  const [publishSlug, setPublishSlug] = React.useState("");
+  const [publishing, setPublishing] = React.useState(false);
+  const [publishedExam, setPublishedExam] = React.useState<{ slug: string; title: string } | null>(null);
+  const [uploadStatus, setUploadStatus] = React.useState(upload.status);
 
   const visibleDrafts = React.useMemo(() => filterNeedsReview ? drafts.filter(d => d.needsReview) : drafts, [drafts, filterNeedsReview]);
 
@@ -62,7 +68,6 @@ export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioPr
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
       setSuccess(`Saved Q${draft.order}`);
-      // Update with server response to ensure consistency
       if (data.draft) {
         setDrafts(prev => prev.map(d => d.id === draft.id ? { ...d, ...data.draft, options: data.draft.options } : d));
       }
@@ -91,7 +96,7 @@ export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioPr
   const handleAddOption = (draftId: string) => {
     const draft = drafts.find(d => d.id === draftId);
     if (!draft) return;
-    const nextLabel = String.fromCharCode(65 + draft.options.length); // A, B, C...
+    const nextLabel = String.fromCharCode(65 + draft.options.length);
     if (draft.options.length >= 6) return;
     updateLocal(draftId, { options: [...draft.options, { label: nextLabel, text: "" }] });
   };
@@ -100,7 +105,6 @@ export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioPr
     const draft = drafts.find(d => d.id === draftId);
     if (!draft) return;
     const filtered = draft.options.filter(o => o.label !== label);
-    // Re-label to keep sequential A,B,C
     const relabeled = filtered.map((o, idx) => ({ ...o, label: String.fromCharCode(65+idx) }));
     let correct = draft.correctOptionLabel;
     if (correct && !relabeled.some(o => o.label === correct)) correct = null;
@@ -117,8 +121,31 @@ export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioPr
       if (!res.ok) throw new Error(data.error || "Approve failed");
       setSuccess(`Approved ${data.approved ?? drafts.length} questions - upload READY`);
       setDrafts(prev => prev.map(d => ({ ...d, status: "APPROVED", needsReview: false })));
+      setUploadStatus("READY");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Approve failed");
+    }
+  };
+
+  const handlePublish = async () => {
+    setError(null);
+    setSuccess(null);
+    setPublishing(true);
+    try {
+      const res = await fetch(`/api/uploads/${uploadId}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: publishTitle, slug: publishSlug || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Publish failed");
+      setPublishedExam({ slug: data.exam.slug, title: data.exam.title });
+      setUploadStatus("PUBLISHED");
+      setSuccess(`Published as exam "${data.exam.title}" (${data.exam.slug})`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Publish failed");
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -135,11 +162,12 @@ export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioPr
       needsReview: true,
       status: "DRAFT",
     };
-    // For temp, we will POST via bulk? Instead, create via API? For MVP, just add locally and require save to create on server? But temp id not in DB.
-    // So we need to create via direct prisma? Instead, we will just push locally and when saved, it will fail because not in DB. So we should create via API call to create draft.
-    // For simplicity, add locally and show warning that it needs backend create - we will implement create via POST to questions route (not yet exist). For now, just add locally.
     setDrafts(prev => [...prev, newDraft]);
   };
+
+  const isReady = uploadStatus === "READY";
+  const isPublished = uploadStatus === "PUBLISHED" || !!publishedExam;
+  const allApproved = drafts.length>0 && drafts.every(d=>d.status==="APPROVED");
 
   return (
     <div className="space-y-6">
@@ -147,18 +175,58 @@ export function ReviewStudio({ uploadId, initialDrafts, upload }: ReviewStudioPr
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Review Studio - {upload.fileName}</span>
-            <Badge variant={upload.status === "READY" ? "default" : upload.status === "REVIEW_REQUIRED" ? "outline" : "secondary"}>{upload.status}</Badge>
+            <Badge variant={isPublished?"default": isReady?"outline" : "secondary"}>{uploadStatus}</Badge>
           </CardTitle>
           <CardDescription>
-            {drafts.length} question(s) extracted via {drafts.length>0 ? "AI" : "-"} • {drafts.filter(d=>d.needsReview).length} need review • Edit, correct, and approve
+            {drafts.length} question(s) • {drafts.filter(d=>d.needsReview).length} need review • {drafts.filter(d=>d.status==="APPROVED").length} approved
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button onClick={handleApproveAll} disabled={drafts.length===0 || drafts.every(d=>d.status==="APPROVED")} className="gap-2"><CheckCircle2 className="size-4" /> Approve All & Mark READY</Button>
+          <Button onClick={handleApproveAll} disabled={drafts.length===0 || allApproved} className="gap-2"><CheckCircle2 className="size-4" /> Approve All & Mark READY</Button>
           <Button variant="outline" onClick={()=>setFilterNeedsReview(!filterNeedsReview)} className="gap-2">{filterNeedsReview ? <EyeOff className="size-4"/> : <Eye className="size-4"/>}{filterNeedsReview ? "Show All" : `Filter Needs Review (${drafts.filter(d=>d.needsReview).length})`}</Button>
           <Button variant="outline" onClick={handleAddQuestion} className="gap-2"><Plus className="size-4"/> Add Question (local)</Button>
         </CardContent>
       </Card>
+
+      {(isReady || isPublished) && (
+        <Card className={isPublished ? "border-green-200 bg-green-50/50" : "border-amber-200"}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">{isPublished ? <><CheckCircle2 className="size-5 text-green-600"/> Published</> : <><UploadCloud className="size-5"/> Publish to Exam Library</>}</CardTitle>
+            <CardDescription>{isPublished ? "This upload is live as an exam. Students can now attempt it." : "Turn approved drafts into a publishable exam. Title and slug can be edited."}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!isPublished ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>Exam Title</Label>
+                    <Input value={publishTitle} onChange={e=>setPublishTitle(e.target.value)} placeholder="e.g. SSC CGL 2024 Tier 1" />
+                  </div>
+                  <div>
+                    <Label>Slug (optional, auto-generated)</Label>
+                    <Input value={publishSlug} onChange={e=>setPublishSlug(e.target.value)} placeholder="ssc-cgl-2024-tier1" />
+                    <p className="mt-1 text-xs text-muted-foreground">Lowercase, hyphens only. Leave blank to auto-generate.</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handlePublish} disabled={publishing || !isReady} className="gap-2"><UploadCloud className="size-4"/>{publishing?"Publishing...":"Publish Exam"}</Button>
+                  {!isReady && <p className="text-xs text-amber-600 self-center">Approve all drafts first (READY required)</p>}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {publishedExam && (
+                  <Link href={`/exams/${publishedExam.slug}`}><Button className="gap-2"><ExternalLink className="size-4"/> View Exam: {publishedExam.title}</Button></Link>
+                )}
+                {!publishedExam && upload.examId && (
+                  <Link href={`/exams/${upload.examId}`}><Button variant="outline" className="gap-2"><ExternalLink className="size-4"/> View Exam</Button></Link>
+                )}
+                <Link href="/exams"><Button variant="outline">Go to Exam Library</Button></Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {error && <p className="flex items-center gap-1 text-sm text-red-600"><AlertCircle className="size-4"/>{error}</p>}
       {success && <p className="flex items-center gap-1 text-sm text-green-600"><CheckCircle2 className="size-4"/>{success}</p>}

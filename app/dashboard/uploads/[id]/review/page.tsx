@@ -91,7 +91,7 @@ export default async function ReviewPage({ params }: Props) {
           <p className="mt-2 text-xs text-muted-foreground">Job status: {upload.jobs[0]?.status ?? "unknown"} • Try re-upload or check logs.</p>
         </div>
       ) : (
-        <ReviewStudio uploadId={id} initialDrafts={initialDrafts} upload={{ fileName: upload.fileName, status: upload.status }} />
+        <ReviewStudio uploadId={id} initialDrafts={initialDrafts} upload={{ fileName: upload.fileName, status: upload.status, examId: upload.examId }} />
       )}
     </div>
   );

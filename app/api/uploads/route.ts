@@ -14,7 +14,7 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const uploads = await prisma.paperUpload.findMany({
     where: { ownerId: userId },
-    include: { jobs: { orderBy: { createdAt: "desc" }, include: { results: true } } },
+    include: { jobs: { orderBy: { createdAt: "desc" }, include: { results: true } }, exam: true },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json({ uploads });

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { Upload, FileText, Clock, AlertCircle, CheckCircle2, Eye, Pencil } from "lucide-react";
+import { Upload, FileText, Clock, AlertCircle, CheckCircle2, Eye, Pencil, ExternalLink } from "lucide-react";
 
 interface ExtractionResult {
   id: string;
@@ -33,6 +33,7 @@ interface UploadItem {
   status: string;
   createdAt: string;
   jobs: Job[];
+  exam?: { slug: string; title: string } | null;
 }
 
 function parseJson<T>(raw: string | null | undefined, fallback: T): T {
@@ -170,7 +171,8 @@ export function UploadManager() {
                     <div className="flex items-center gap-2 shrink-0">
                       <Badge variant={u.status === "UPLOADED" || u.status === "PROCESSING" || u.status === "EXTRACTING" || u.status === "OCR_PROCESSING" || u.status === "AI_EXTRACTING" ? "secondary" : u.status === "FAILED" ? "destructive" : u.status === "REVIEW_REQUIRED" ? "outline" : "default"}>{u.status}</Badge>
                       <Badge variant="outline">{u.id.slice(0, 8)}</Badge>
-                      {raw?.questionCount != null && raw.questionCount>0 && <Link href={`/dashboard/uploads/${u.id}/review`}><Button size="sm" variant="default" className="gap-1"><Pencil className="size-3"/>Review ({raw.questionCount})</Button></Link>}
+                      {u.status === "PUBLISHED" && u.exam && <Link href={`/exams/${u.exam.slug}`}><Button size="sm" variant="default" className="gap-1"><ExternalLink className="size-3"/>View Exam</Button></Link>}
+                      {raw?.questionCount != null && raw.questionCount>0 && u.status !== "PUBLISHED" && <Link href={`/dashboard/uploads/${u.id}/review`}><Button size="sm" variant="default" className="gap-1"><Pencil className="size-3"/>Review ({raw.questionCount})</Button></Link>}
                       <Button size="sm" variant="ghost" onClick={() => setExpanded(isExpanded ? null : u.id)}><Eye className="size-4" />{isExpanded ? "Hide" : "Details"}</Button>
                     </div>
                   </div>
