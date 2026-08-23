@@ -7,7 +7,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const session = await auth();
   const userId = (session?.user as unknown as { id?: string })?.id;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const upload = await prisma.paperUpload.findUnique({ where: { id }, include: { jobs: { orderBy: { createdAt: "desc" } } } });
+  const upload = await prisma.paperUpload.findUnique({ where: { id }, include: { jobs: { orderBy: { createdAt: "desc" }, include: { results: true } } } });
   if (!upload) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (upload.ownerId !== userId) {
     // Allow admin/moderator to view? For now check role

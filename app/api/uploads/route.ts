@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { saveFile } from "@/lib/storage";
 import { enqueueProcessingJob } from "@/lib/queue";
+import { runExtractionJob } from "@/lib/document/pipeline";
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_MIMES = ["application/pdf"];
@@ -13,7 +14,7 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const uploads = await prisma.paperUpload.findMany({
     where: { ownerId: userId },
-    include: { jobs: { orderBy: { createdAt: "desc" } } },
+    include: { jobs: { orderBy: { createdAt: "desc" }, include: { results: true } } },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json({ uploads });
@@ -74,8 +75,9 @@ export async function POST(req: Request) {
       },
     });
     const job = await enqueueProcessingJob(paperUpload.id);
-    // Update PaperUpload status to PROCESSING (optional)
     await prisma.paperUpload.update({ where: { id: paperUpload.id }, data: { status: "PROCESSING" } });
+    // Phase 8: fire text extraction in background (no await to keep upload responsive)
+    runExtractionJob(job.id).catch((err) => console.error("[extraction] background failed", err));
     return NextResponse.json({ paperUpload, job }, { status: 201 });
   } catch (e) {
     console.error("[upload db]", e);
