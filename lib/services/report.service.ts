@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { z } from "zod";
+import { sanitizeDescription } from "@/lib/security/sanitize";
 
 export const reportTypeSchema = z.enum(["WRONG_QUESTION","WRONG_ANSWER","BROKEN_IMAGE","FORMATTING","DUPLICATE","WRONG_EXPLANATION","OTHER"]);
 
@@ -18,7 +19,8 @@ export type CreateReportInput = z.infer<typeof createReportSchema>;
 export type UpdateReportInput = z.infer<typeof updateReportSchema>;
 
 export async function createReport(params: { reporterId: string } & CreateReportInput) {
-  const { reporterId, examId, questionId, type, description } = params;
+  const { reporterId, examId, questionId, type, description: rawDescription } = params;
+  const description = sanitizeDescription(rawDescription);
   // Validate exam/question existence if provided
   if (examId) {
     const exam = await prisma.exam.findUnique({ where: { id: examId } });
