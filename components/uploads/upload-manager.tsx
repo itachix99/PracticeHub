@@ -63,7 +63,7 @@ export function UploadManager() {
 
   // Poll while any job is PROCESSING or EXTRACTING
   React.useEffect(() => {
-    const hasPending = uploads.some((u) => u.jobs[0] && ["PROCESSING","EXTRACTING","UPLOADED"].includes(u.jobs[0].status));
+    const hasPending = uploads.some((u) => u.jobs[0] && ["PROCESSING","EXTRACTING","OCR_PROCESSING","UPLOADED"].includes(u.jobs[0].status));
     if (!hasPending) return;
     const id = setInterval(fetchUploads, 3000);
     return () => clearInterval(id);
@@ -106,7 +106,7 @@ export function UploadManager() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Upload className="size-5" /> Upload PDF</CardTitle>
-          <CardDescription>PDF only, max 50MB, must start with %PDF, encrypted PDFs rejected. Text extraction runs automatically (Phase 8).</CardDescription>
+          <CardDescription>PDF only, max 50MB, must start with %PDF, encrypted PDFs rejected. Text extraction + OCR fallback runs automatically (Phase 8-9). Configure Azure DI via env for best results.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div
@@ -144,7 +144,7 @@ export function UploadManager() {
               {uploads.map((u) => {
                 const job = u.jobs[0];
                 const extraction = job?.results?.[0];
-                const raw = parseJson<{ totalPages:number; avgCharsPerPage:number; textCoverage:number; needsOcr:boolean; pages:Array<{pageNumber:number; charCount:number; hasText:boolean}> } | null>(extraction?.raw ?? null, null);
+                const raw = parseJson<{ totalPages:number; avgCharsPerPage:number; textCoverage:number; needsOcr:boolean; ocrProvider?:string; ocrApplied?:boolean; pages:Array<{pageNumber:number; charCount:number; hasText:boolean}> } | null>(extraction?.raw ?? null, null);
                 const structured = parseJson<{ totalPages:number; fullText:string; pages:Array<{pageNumber:number; text:string}> } | null>(extraction?.structured ?? null, null);
                 const warnings = parseJson<string[]>(extraction?.warnings ?? null, []);
                 const logs = parseJson<Array<{ts:string; level:string; msg:string}>>(job?.logs ?? null, []);
@@ -158,14 +158,15 @@ export function UploadManager() {
                       {job && <p className="mt-1 flex items-center gap-1 text-xs"><Clock className="size-3" />Job {job.status}{job.failedReason ? ` - ${job.failedReason}` : ""} \u2022 {new Date(job.createdAt).toLocaleString()}</p>}
                       {extraction && raw && (
                         <p className="mt-1 text-xs">
-                          <span className="font-medium">{raw.totalPages} page(s)</span> \u2022 {raw.avgCharsPerPage} avg chars/page \u2022 coverage {(raw.textCoverage*100).toFixed(0)}% {raw.needsOcr && <span className="text-amber-600">(needs OCR - Phase 9)</span>}
+                          <span className="font-medium">{raw.totalPages} page(s)</span> \u2022 {raw.avgCharsPerPage} avg chars/page \u2022 coverage {(raw.textCoverage*100).toFixed(0)}% {raw.needsOcr && <span className="text-amber-600">(needs review - low coverage)</span>}
+                          {raw.ocrApplied && <span className="text-green-600"> OCR via {raw.ocrProvider}</span>}
                           {extraction.confidence != null && <span> \u2022 conf {(extraction.confidence*100).toFixed(0)}%</span>}
                         </p>
                       )}
                       {warnings.length > 0 && <p className="text-xs text-amber-600">{warnings.join(", ")}</p>}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <Badge variant={u.status === "UPLOADED" || u.status === "PROCESSING" || u.status === "EXTRACTING" ? "secondary" : u.status === "FAILED" ? "destructive" : u.status === "REVIEW_REQUIRED" ? "outline" : "default"}>{u.status}</Badge>
+                      <Badge variant={u.status === "UPLOADED" || u.status === "PROCESSING" || u.status === "EXTRACTING" || u.status === "OCR_PROCESSING" ? "secondary" : u.status === "FAILED" ? "destructive" : u.status === "REVIEW_REQUIRED" ? "outline" : "default"}>{u.status}</Badge>
                       <Badge variant="outline">{u.id.slice(0, 8)}</Badge>
                       <Button size="sm" variant="ghost" onClick={() => setExpanded(isExpanded ? null : u.id)}><Eye className="size-4" />{isExpanded ? "Hide" : "Details"}</Button>
                     </div>

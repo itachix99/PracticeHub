@@ -8,6 +8,9 @@ const envSchema = z.object({
   NEXTAUTH_URL: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  AZURE_DI_ENDPOINT: z.string().optional(),
+  AZURE_DI_KEY: z.string().optional(),
+  AZURE_DI_ENABLED: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
