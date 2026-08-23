@@ -53,6 +53,7 @@ export default async function DashboardPage() {
               <Link href="/exams"><Button variant="outline" className="w-full justify-start">Exam Library</Button></Link>
               <Link href="/dashboard/uploads"><Button variant="outline" className="w-full justify-start">My Uploads</Button></Link>
               {uploader.totalUploads>0 && <Link href="/dashboard/uploads"><Button variant="outline" className="w-full justify-start">Review Queue ({uploader.uploadsByStatus["REVIEW_REQUIRED"] ?? 0})</Button></Link>}
+              {(user.role === "MODERATOR" || user.role === "ADMIN") && <Link href="/dashboard/reports"><Button variant="outline" className="w-full justify-start">Moderation Queue</Button></Link>}
             </CardContent>
           </Card>
         </div>

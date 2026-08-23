@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ReportDialog } from "@/components/reports/report-dialog";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -37,6 +38,7 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ slu
           {exam.organization && <Badge variant="secondary">{exam.organization.name}</Badge>}
           <Badge variant="outline">{exam.slug}</Badge>
           <span className="text-sm text-muted-foreground">{totalQuestions} questions • {minutes} min • {exam.currentVersion.sections.length} sections</span>
+          <ReportDialog examId={exam.id} triggerLabel="Report Exam" />
         </div>
       </div>
 
@@ -70,6 +72,9 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ slu
                     ))}
                   </ul>
                   {q.explanation && <p className="mt-2 text-xs text-muted-foreground">Exp: {q.explanation}</p>}
+                  <div className="mt-2">
+                    <ReportDialog questionId={q.id} examId={exam.id} triggerLabel="Report Question" />
+                  </div>
                 </div>
               ))}
               {sec.questions.length > 3 && <p className="text-sm text-muted-foreground">+ {sec.questions.length - 3} more questions...</p>}
