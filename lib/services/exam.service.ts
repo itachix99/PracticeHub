@@ -31,84 +31,87 @@ export async function createExamWithVersion(params: {
   }>;
 }) {
   const parsedConfig = validateExamConfig(params.config);
-  return prisma.$transaction(async (tx) => {
-    const exam = await tx.exam.create({
-      data: {
-        slug: params.slug,
-        title: params.title,
-        organizationId: params.organizationId,
-        ownerId: params.ownerId,
-        visibility: "PUBLIC",
-        isPublished: false,
-      },
-    });
-    const version = await tx.examVersion.create({
-      data: {
-        examId: exam.id,
-        version: 1,
-        config: parsedConfig as unknown as never,
-        instructions: params.instructions
-          ? ({ text: params.instructions } as unknown as never)
-          : undefined,
-      },
-    });
-    for (const sec of params.sections) {
-      const section = await tx.examSection.create({
+  return prisma.$transaction(
+    async (tx) => {
+      const exam = await tx.exam.create({
         data: {
-          versionId: version.id,
-          name: sec.name,
-          order: sec.order,
-          durationSec: sec.durationSec,
+          slug: params.slug,
+          title: params.title,
+          organizationId: params.organizationId,
+          ownerId: params.ownerId,
+          visibility: "PUBLIC",
+          isPublished: false,
         },
       });
-      for (const q of sec.questions) {
-        const question = await tx.question.create({
+      const version = await tx.examVersion.create({
+        data: {
+          examId: exam.id,
+          version: 1,
+          config: parsedConfig as unknown as never,
+          instructions: params.instructions
+            ? ({ text: params.instructions } as unknown as never)
+            : undefined,
+        },
+      });
+      for (const sec of params.sections) {
+        const section = await tx.examSection.create({
           data: {
-            sectionId: section.id,
-            order: q.order,
-            text: q.text,
-            explanation: q.explanation,
-            marks: q.marks ?? 1,
-            negativeMarks: q.negativeMarks ?? 0.25,
-            isBonus: q.isBonus ?? false,
-            isCancelled: q.isCancelled ?? false,
-            type: "SCQ",
+            versionId: version.id,
+            name: sec.name,
+            order: sec.order,
+            durationSec: sec.durationSec,
           },
         });
-        for (const opt of q.options) {
-          await tx.questionOption.create({
+        for (const q of sec.questions) {
+          const question = await tx.question.create({
             data: {
-              questionId: question.id,
-              label: opt.label,
-              order: opt.order,
-              text: opt.text,
-              isCorrect: opt.isCorrect,
+              sectionId: section.id,
+              order: q.order,
+              text: q.text,
+              explanation: q.explanation,
+              marks: q.marks ?? 1,
+              negativeMarks: q.negativeMarks ?? 0.25,
+              isBonus: q.isBonus ?? false,
+              isCancelled: q.isCancelled ?? false,
+              type: "SCQ",
             },
           });
-        }
-        const correct = q.options.find((o) => o.isCorrect);
-        if (correct) {
-          const correctOpt = await tx.questionOption.findFirst({
-            where: { questionId: question.id, label: correct.label },
-          });
-          if (correctOpt) {
-            await tx.answer.create({
+          for (const opt of q.options) {
+            await tx.questionOption.create({
               data: {
                 questionId: question.id,
-                correctOptionId: correctOpt.id,
-                explanation: q.explanation,
+                label: opt.label,
+                order: opt.order,
+                text: opt.text,
+                isCorrect: opt.isCorrect,
               },
             });
           }
+          const correct = q.options.find((o) => o.isCorrect);
+          if (correct) {
+            const correctOpt = await tx.questionOption.findFirst({
+              where: { questionId: question.id, label: correct.label },
+            });
+            if (correctOpt) {
+              await tx.answer.create({
+                data: {
+                  questionId: question.id,
+                  correctOptionId: correctOpt.id,
+                  explanation: q.explanation,
+                },
+              });
+            }
+          }
         }
       }
-    }
-    const updated = await tx.exam.update({
-      where: { id: exam.id },
-      data: { currentVersionId: version.id, isPublished: true },
-    });
-    return { exam: updated, version };
-  }, { timeout: 30000, maxWait: 10000 });
+      const updated = await tx.exam.update({
+        where: { id: exam.id },
+        data: { currentVersionId: version.id, isPublished: true },
+      });
+      return { exam: updated, version };
+    },
+    { timeout: 30000, maxWait: 10000 }
+  );
 }
 
 export interface PublishedExamsFilters {

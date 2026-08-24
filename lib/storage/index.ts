@@ -76,9 +76,7 @@ async function getFromR2(key: string): Promise<Buffer> {
     throw new Error("R2 SDK not installed");
   }
   const Client = S3Client as unknown as new (opts: unknown) => {
-    send: (
-      cmd: unknown
-    ) => Promise<{
+    send: (cmd: unknown) => Promise<{
       Body?: { transformToByteArray: () => Promise<Uint8Array> };
     }>;
   };
