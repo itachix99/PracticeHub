@@ -28,7 +28,6 @@ async function getRedis() {
   if (!url || !token) return null;
   if (redisClient) return redisClient;
   try {
-    // @ts-expect-error - optional dep (not installed in dev) - webpackIgnore to prevent bundling warning
     const { Redis } = await import(/* webpackIgnore: true */ "@upstash/redis");
     const r = new Redis({ url, token });
     redisClient = r as unknown as typeof redisClient;

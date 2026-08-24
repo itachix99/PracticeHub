@@ -34,7 +34,6 @@ function sanitizeFileName(name: string): string {
 async function saveToR2(buffer: Buffer, key: string): Promise<void> {
   let S3Client: unknown, PutObjectCommand: unknown;
   try {
-    // @ts-expect-error - optional dep for R2 - webpackIgnore to avoid build warning
     const mod = await import(/* webpackIgnore: true */ "@aws-sdk/client-s3");
     S3Client = (mod as unknown as { S3Client: unknown }).S3Client;
     PutObjectCommand = (mod as unknown as { PutObjectCommand: unknown })
@@ -69,8 +68,7 @@ async function saveToR2(buffer: Buffer, key: string): Promise<void> {
 async function getFromR2(key: string): Promise<Buffer> {
   let S3Client: unknown, GetObjectCommand: unknown;
   try {
-    // @ts-expect-error - optional dep for R2 - webpackIgnore to avoid build warning
-    const mod = await import("@aws-sdk/client-s3");
+    const mod = await import(/* webpackIgnore: true */ "@aws-sdk/client-s3");
     S3Client = (mod as unknown as { S3Client: unknown }).S3Client;
     GetObjectCommand = (mod as unknown as { GetObjectCommand: unknown })
       .GetObjectCommand;
