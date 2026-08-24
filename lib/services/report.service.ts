@@ -2,24 +2,45 @@ import { prisma } from "../db";
 import { z } from "zod";
 import { sanitizeDescription } from "@/lib/security/sanitize";
 
-export const reportTypeSchema = z.enum(["WRONG_QUESTION","WRONG_ANSWER","BROKEN_IMAGE","FORMATTING","DUPLICATE","WRONG_EXPLANATION","OTHER"]);
+export const reportTypeSchema = z.enum([
+  "WRONG_QUESTION",
+  "WRONG_ANSWER",
+  "BROKEN_IMAGE",
+  "FORMATTING",
+  "DUPLICATE",
+  "WRONG_EXPLANATION",
+  "OTHER",
+]);
 
-export const createReportSchema = z.object({
-  examId: z.string().optional(),
-  questionId: z.string().optional(),
-  type: reportTypeSchema,
-  description: z.string().min(10).max(2000),
-}).refine(data => !!data.examId || !!data.questionId, { message: "Either examId or questionId must be provided", path: ["examId"] });
+export const createReportSchema = z
+  .object({
+    examId: z.string().optional(),
+    questionId: z.string().optional(),
+    type: reportTypeSchema,
+    description: z.string().min(10).max(2000),
+  })
+  .refine((data) => !!data.examId || !!data.questionId, {
+    message: "Either examId or questionId must be provided",
+    path: ["examId"],
+  });
 
 export const updateReportSchema = z.object({
-  status: z.enum(["OPEN","RESOLVED","REJECTED"]),
+  status: z.enum(["OPEN", "RESOLVED", "REJECTED"]),
 });
 
 export type CreateReportInput = z.infer<typeof createReportSchema>;
 export type UpdateReportInput = z.infer<typeof updateReportSchema>;
 
-export async function createReport(params: { reporterId: string } & CreateReportInput) {
-  const { reporterId, examId, questionId, type, description: rawDescription } = params;
+export async function createReport(
+  params: { reporterId: string } & CreateReportInput
+) {
+  const {
+    reporterId,
+    examId,
+    questionId,
+    type,
+    description: rawDescription,
+  } = params;
   const description = sanitizeDescription(rawDescription);
   // Validate exam/question existence if provided
   if (examId) {
@@ -27,7 +48,9 @@ export async function createReport(params: { reporterId: string } & CreateReport
     if (!exam) throw new Error("Exam not found");
   }
   if (questionId) {
-    const question = await prisma.question.findUnique({ where: { id: questionId } });
+    const question = await prisma.question.findUnique({
+      where: { id: questionId },
+    });
     if (!question) throw new Error("Question not found");
   }
   return prisma.report.create({
@@ -39,11 +62,21 @@ export async function createReport(params: { reporterId: string } & CreateReport
       description,
       status: "OPEN",
     },
-    include: { reporter: { select: { id: true, name: true, email: true } }, exam: { select: { id: true, title: true, slug: true } }, question: { select: { id: true, text: true } } },
+    include: {
+      reporter: { select: { id: true, name: true, email: true } },
+      exam: { select: { id: true, title: true, slug: true } },
+      question: { select: { id: true, text: true } },
+    },
   });
 }
 
-export async function getReports(filters: { status?: string; examId?: string; reporterId?: string; role?: string; userId?: string }) {
+export async function getReports(filters: {
+  status?: string;
+  examId?: string;
+  reporterId?: string;
+  role?: string;
+  userId?: string;
+}) {
   const where: Record<string, unknown> = {};
   if (filters.status) where.status = filters.status;
   if (filters.examId) where.examId = filters.examId;
@@ -65,12 +98,19 @@ export async function getReports(filters: { status?: string; examId?: string; re
   });
 }
 
-export async function updateReportStatus(reportId: string, status: "OPEN" | "RESOLVED" | "REJECTED") {
+export async function updateReportStatus(
+  reportId: string,
+  status: "OPEN" | "RESOLVED" | "REJECTED"
+) {
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw new Error("Report not found");
   return prisma.report.update({
     where: { id: reportId },
     data: { status: status as never },
-    include: { reporter: { select: { id: true, email: true } }, exam: true, question: true },
+    include: {
+      reporter: { select: { id: true, email: true } },
+      exam: true,
+      question: true,
+    },
   });
 }

@@ -35,24 +35,24 @@ flowchart TD
 
 ## 3. Technology Stack — Justified
 
-| Layer | Choice | Reason | Alternative rejected |
-|---|---|---|---|
-| Frontend | Next.js 15 App Router + TS strict | RSC for library/dashboard SEO, Route Handlers colocate API, single deploy. | Separate Vite + Express adds CORS/deploy complexity for MVP |
-| Styling | Tailwind CSS v4 | Perf, design tokens, shadcn native | CSS modules too verbose |
-| Components | shadcn/ui + Radix | Accessible, copy-paste, no lock-in | MUI heavier |
-| Math | KaTeX | Faster than MathJax, SSR, LaTeX | MathJax bigger bundle |
-| DB | PostgreSQL 16 | Relational required (versioning, FK, ACID) | Mongo loses integrity |
-| ORM | Prisma 6 | Migrations, DX, Auth.js adapter, Zod integration | Drizzle lighter but immature adapter |
-| Auth | Auth.js v5 (NextAuth) + Prisma Adapter | Self-hosted, credentials+OAuth, RBAC | Clerk is vendor lock-in + cost |
-| Validation | Zod | Single schema client/server/AI | Yup less TS |
-| Storage | Cloudflare R2 (S3 compat) | Zero egress, presigned URLs | AWS S3 egress expensive |
-| Jobs | pg-boss (MVP) -> BullMQ+Redis | No Redis needed early; uses existing PG. Interface abstracted. | Trigger.dev adds vendor |
-| PDF text | unpdf/pdf-parse + text-density check | Avoid OCR when text exists | Regex alone brittle |
-| OCR | Azure Document Intelligence primary, Tesseract fallback | Best tables + Hindi Devanagari | Tesseract alone poor with tables |
-| AI | Vercel AI SDK + provider abstraction | Structured JSON via zod, swappable | Direct OpenAI SDK locks |
-| State | Zustand + IndexedDB/localStorage | Minimal, persistable | Redux overkill |
-| Testing | Vitest + Playwright + MSW | Unit + E2E | Jest slower |
-| Logging | Pino + Sentry | Structured + error tracking | Console alone unsearchable |
+| Layer      | Choice                                                  | Reason                                                                     | Alternative rejected                                        |
+| ---------- | ------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Frontend   | Next.js 15 App Router + TS strict                       | RSC for library/dashboard SEO, Route Handlers colocate API, single deploy. | Separate Vite + Express adds CORS/deploy complexity for MVP |
+| Styling    | Tailwind CSS v4                                         | Perf, design tokens, shadcn native                                         | CSS modules too verbose                                     |
+| Components | shadcn/ui + Radix                                       | Accessible, copy-paste, no lock-in                                         | MUI heavier                                                 |
+| Math       | KaTeX                                                   | Faster than MathJax, SSR, LaTeX                                            | MathJax bigger bundle                                       |
+| DB         | PostgreSQL 16                                           | Relational required (versioning, FK, ACID)                                 | Mongo loses integrity                                       |
+| ORM        | Prisma 6                                                | Migrations, DX, Auth.js adapter, Zod integration                           | Drizzle lighter but immature adapter                        |
+| Auth       | Auth.js v5 (NextAuth) + Prisma Adapter                  | Self-hosted, credentials+OAuth, RBAC                                       | Clerk is vendor lock-in + cost                              |
+| Validation | Zod                                                     | Single schema client/server/AI                                             | Yup less TS                                                 |
+| Storage    | Cloudflare R2 (S3 compat)                               | Zero egress, presigned URLs                                                | AWS S3 egress expensive                                     |
+| Jobs       | pg-boss (MVP) -> BullMQ+Redis                           | No Redis needed early; uses existing PG. Interface abstracted.             | Trigger.dev adds vendor                                     |
+| PDF text   | unpdf/pdf-parse + text-density check                    | Avoid OCR when text exists                                                 | Regex alone brittle                                         |
+| OCR        | Azure Document Intelligence primary, Tesseract fallback | Best tables + Hindi Devanagari                                             | Tesseract alone poor with tables                            |
+| AI         | Vercel AI SDK + provider abstraction                    | Structured JSON via zod, swappable                                         | Direct OpenAI SDK locks                                     |
+| State      | Zustand + IndexedDB/localStorage                        | Minimal, persistable                                                       | Redux overkill                                              |
+| Testing    | Vitest + Playwright + MSW                               | Unit + E2E                                                                 | Jest slower                                                 |
+| Logging    | Pino + Sentry                                           | Structured + error tracking                                                | Console alone unsearchable                                  |
 
 Environment validation: `lib/env.ts` with `zod` parsing at boot, fails fast if missing.
 
@@ -90,20 +90,33 @@ Domain logic lives in `lib/` — never in components.
 ## 5. Exam Engine (detail)
 
 Config stored on `ExamVersion.config` (jsonb, validated by Zod):
+
 ```ts
 type ExamConfig = {
-  timing: { totalSec: number; sectionTimers?: Record<string, number>; warningSec?: number }
-  marking: { perSection: Record<string, {marks:number, negative:number}>, bonusAllowed:boolean }
-  navigation: { mode: 'free'|'sequential'|'section-lock'; sectionOrder?: string[] }
-  palette: { states: QuestionState[] }
-}
+  timing: {
+    totalSec: number;
+    sectionTimers?: Record<string, number>;
+    warningSec?: number;
+  };
+  marking: {
+    perSection: Record<string, { marks: number; negative: number }>;
+    bonusAllowed: boolean;
+  };
+  navigation: {
+    mode: "free" | "sequential" | "section-lock";
+    sectionOrder?: string[];
+  };
+  palette: { states: QuestionState[] };
+};
 ```
+
 Pure functions:
+
 - `canNavigate(from,to,config,attemptState) -> boolean`
 - `nextQuestionState(action) -> QuestionState`
 - `computeScore(attempt, version) -> Result`
 - `isExpired(expiresAt) -> boolean`
-Never import React.
+  Never import React.
 
 Question types: union `type QuestionType='SCQ'|'MCQ'|'NUMERIC'|'PASSAGE'` — MVP implements SCQ only, others stub.
 
@@ -116,6 +129,7 @@ State machine (DB enum): `CREATED -> IN_PROGRESS -> SUBMITTED | EXPIRED | ABANDO
 Per-question `AttemptAnswer.state`: NOT_VISITED, NOT_ANSWERED, ANSWERED, MARKED, ANSWERED_MARKED.
 
 Flow:
+
 - `POST /api/attempts` creates attempt with `startedAt=now()`, `expiresAt=startedAt+totalSec`, state IN_PROGRESS.
 - Client persists to IndexedDB (key `attempt:{id}`) + syncs to server every 15s + on Save&Next/Mark/Clear + `visibilitychange`/`beforeunload`.
 - Recovery: on mount fetch `GET /api/attempts/:id/snapshot` (server truth for expiresAt). Merge: server answers win unless local newer `updatedAt` and still IN_PROGRESS. Guard with `If-Match` etag.
@@ -217,10 +231,9 @@ Retries: exponential backoff 3x, dead-letter to `FAILED` with logs visible in ad
 
 ## 14. Decisions Log
 
-| Date | Decision | Rationale |
-|---|---|---|
+| Date       | Decision                    | Rationale                                   |
+| ---------- | --------------------------- | ------------------------------------------- |
 | 2026-08-23 | pg-boss over BullMQ for MVP | Avoid Redis infra, swap via interface later |
-| 2026-08-23 | Auth.js over Clerk | Own data, no lock-in |
-| 2026-08-23 | KaTeX over MathJax | Perf |
-| 2026-08-23 | Colocated Next.js backend | Single deploy |
-
+| 2026-08-23 | Auth.js over Clerk          | Own data, no lock-in                        |
+| 2026-08-23 | KaTeX over MathJax          | Perf                                        |
+| 2026-08-23 | Colocated Next.js backend   | Single deploy                               |

@@ -6,7 +6,9 @@ describe("stripHtml", () => {
     expect(stripHtml("<b>hello</b>")).toBe("hello");
   });
   it("removes nested tags", () => {
-    expect(stripHtml("<div><span>nested</span> text</div>")).toBe("nested text");
+    expect(stripHtml("<div><span>nested</span> text</div>")).toBe(
+      "nested text"
+    );
   });
   it("removes script tags but keeps content", () => {
     expect(stripHtml("<script>alert(1)</script>")).toBe("alert(1)");
@@ -30,7 +32,8 @@ describe("sanitizeText", () => {
     expect(sanitizeText("<b>bold</b> text", 100)).toBe("bold text");
   });
   it("removes control chars", () => {
-    const withControl = "hello" + String.fromCharCode(0) + String.fromCharCode(1) + "world";
+    const withControl =
+      "hello" + String.fromCharCode(0) + String.fromCharCode(1) + "world";
     expect(sanitizeText(withControl, 100)).toBe("helloworld");
   });
   it("keeps newlines and tabs", () => {
@@ -43,14 +46,14 @@ describe("sanitizeText", () => {
     expect(sanitizeText("a".repeat(10), 5)).toBe("aaaaa");
   });
   it("sanitizes xss payload", () => {
-    const xss = '<img src=x onerror=alert(1)>hello';
+    const xss = "<img src=x onerror=alert(1)>hello";
     const out = sanitizeText(xss, 2000);
     expect(out).not.toContain("<");
     expect(out).not.toContain(">");
     expect(out).toBe("hello");
   });
   it("handles svg xss", () => {
-    expect(sanitizeText('<svg onload=alert(1)>', 100)).toBe("");
+    expect(sanitizeText("<svg onload=alert(1)>", 100)).toBe("");
   });
 });
 
@@ -60,7 +63,9 @@ describe("sanitizeDescription", () => {
     expect(sanitizeDescription(long).length).toBe(2000);
   });
   it("strips html in description", () => {
-    expect(sanitizeDescription("<p>Report <b>text</b></p>")).toBe("Report text");
+    expect(sanitizeDescription("<p>Report <b>text</b></p>")).toBe(
+      "Report text"
+    );
   });
   it("keeps meaningful text", () => {
     expect(sanitizeDescription("Valid report 123")).toBe("Valid report 123");

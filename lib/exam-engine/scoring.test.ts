@@ -7,8 +7,26 @@ import { canNavigate } from "./navigation";
 describe("computeScore", () => {
   it("scores all correct", () => {
     const qs = [
-      { questionId: "q1", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: false, isCancelled: false, correctOptionId: "a", selectedOptionId: "a" },
-      { questionId: "q2", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: false, isCancelled: false, correctOptionId: "b", selectedOptionId: "b" },
+      {
+        questionId: "q1",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "a",
+      },
+      {
+        questionId: "q2",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "b",
+        selectedOptionId: "b",
+      },
     ];
     const r = computeScore(qs);
     expect(r.score).toBe(4);
@@ -21,8 +39,26 @@ describe("computeScore", () => {
 
   it("applies negative marking", () => {
     const qs = [
-      { questionId: "q1", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: false, isCancelled: false, correctOptionId: "a", selectedOptionId: "b" },
-      { questionId: "q2", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: false, isCancelled: false, correctOptionId: "a", selectedOptionId: null },
+      {
+        questionId: "q1",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "b",
+      },
+      {
+        questionId: "q2",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: null,
+      },
     ];
     const r = computeScore(qs);
     expect(r.score).toBe(-0.5);
@@ -36,20 +72,65 @@ describe("computeScore", () => {
 
   it("excludes bonus and cancelled from max and score", () => {
     const qs = [
-      { questionId: "q1", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: true, isCancelled: false, correctOptionId: "a", selectedOptionId: "a" },
-      { questionId: "q2", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: false, isCancelled: true, correctOptionId: "a", selectedOptionId: "b" },
-      { questionId: "q3", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: false, isCancelled: false, correctOptionId: "a", selectedOptionId: "a" },
+      {
+        questionId: "q1",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: true,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "a",
+      },
+      {
+        questionId: "q2",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: false,
+        isCancelled: true,
+        correctOptionId: "a",
+        selectedOptionId: "b",
+      },
+      {
+        questionId: "q3",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "a",
+      },
     ];
     const r = computeScore(qs);
     expect(r.maxScore).toBe(2); // only q3 counts
     expect(r.score).toBe(2);
-    expect(r.correct).toBe(2); // bonus correct still counts? Actually our logic counts bonus correct but not in max — check current impl counts correct for bonus too.
+    expect(r.correct).toBe(1); // bonus correct excluded from correct count (keeps correct/max aligned)
   });
 
   it("sectionWise breakdown", () => {
     const qs = [
-      { questionId: "q1", sectionId: "s1", marks: 1, negativeMarks: 0, isBonus: false, isCancelled: false, correctOptionId: "a", selectedOptionId: "a" },
-      { questionId: "q2", sectionId: "s2", marks: 1, negativeMarks: 0, isBonus: false, isCancelled: false, correctOptionId: "a", selectedOptionId: "b" },
+      {
+        questionId: "q1",
+        sectionId: "s1",
+        marks: 1,
+        negativeMarks: 0,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "a",
+      },
+      {
+        questionId: "q2",
+        sectionId: "s2",
+        marks: 1,
+        negativeMarks: 0,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "b",
+      },
     ];
     const r = computeScore(qs);
     expect(r.sectionWise).toHaveLength(2);
@@ -64,7 +145,9 @@ describe("computeScore", () => {
 
 describe("states", () => {
   it("transitions", () => {
-    expect(nextQuestionState("NOT_VISITED", "visit", false)).toBe("NOT_ANSWERED");
+    expect(nextQuestionState("NOT_VISITED", "visit", false)).toBe(
+      "NOT_ANSWERED"
+    );
     expect(nextQuestionState("NOT_ANSWERED", "answer", true)).toBe("ANSWERED");
     expect(nextQuestionState("ANSWERED", "mark", true)).toBe("ANSWERED_MARKED");
     expect(nextQuestionState("NOT_ANSWERED", "mark", false)).toBe("MARKED");
@@ -85,12 +168,31 @@ describe("timer", () => {
 
 describe("navigation", () => {
   it("free mode allows all", () => {
-    const config = { timing: { totalSec: 3600 }, marking: { default: { marks: 1, negative: 0 }, bonusAllowed: true }, navigation: { mode: "free" as const }, questionTypes: ["SCQ"] };
-    expect(canNavigate({}, { sectionId: "s2", questionOrder: 5 }, config)).toBe(true);
+    const config = {
+      timing: { totalSec: 3600 },
+      marking: { default: { marks: 1, negative: 0 }, bonusAllowed: true },
+      navigation: { mode: "free" as const },
+      questionTypes: ["SCQ"],
+    };
+    expect(canNavigate({}, { sectionId: "s2", questionOrder: 5 }, config)).toBe(
+      true
+    );
   });
   it("section-lock blocks backward", () => {
-    const config = { timing: { totalSec: 3600 }, marking: { default: { marks: 1, negative: 0 }, bonusAllowed: true }, navigation: { mode: "section-lock" as const, sectionOrder: ["s1", "s2", "s3"] }, questionTypes: ["SCQ"] };
-    expect(canNavigate({}, { sectionId: "s1", questionOrder: 0 }, config, "s2")).toBe(false);
-    expect(canNavigate({}, { sectionId: "s3", questionOrder: 0 }, config, "s2")).toBe(true);
+    const config = {
+      timing: { totalSec: 3600 },
+      marking: { default: { marks: 1, negative: 0 }, bonusAllowed: true },
+      navigation: {
+        mode: "section-lock" as const,
+        sectionOrder: ["s1", "s2", "s3"],
+      },
+      questionTypes: ["SCQ"],
+    };
+    expect(
+      canNavigate({}, { sectionId: "s1", questionOrder: 0 }, config, "s2")
+    ).toBe(false);
+    expect(
+      canNavigate({}, { sectionId: "s3", questionOrder: 0 }, config, "s2")
+    ).toBe(true);
   });
 });

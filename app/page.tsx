@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ArrowRight, CheckCircle2, FlaskConical, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  FlaskConical,
+  ShieldCheck,
+} from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -12,17 +23,20 @@ export default function HomePage() {
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Badge variant="secondary">Phase 1 \u2022 Foundation</Badge>
-            <Badge variant="outline">Next.js 15 \u2022 Tailwind v4 \u2022 shadcn/ui</Badge>
+            <Badge variant="outline">
+              Next.js 15 \u2022 Tailwind v4 \u2022 shadcn/ui
+            </Badge>
           </div>
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
             PracticeHub
-            <span className="block text-2xl font-semibold text-muted-foreground sm:text-3xl">
+            <span className="text-muted-foreground block text-2xl font-semibold sm:text-3xl">
               Generic Exam Engine \u2022 Realistic CBT Simulation
             </span>
           </h1>
-          <p className="max-w-2xl text-lg text-muted-foreground">
-            Convert any previous-year paper into a realistic computer-based test. Phase 1 establishes
-            the foundation \u2014 design system, layout, and tooling. Exam engine lands in Phase 3.
+          <p className="text-muted-foreground max-w-2xl text-lg">
+            Convert any previous-year paper into a realistic computer-based
+            test. Phase 1 establishes the foundation \u2014 design system,
+            layout, and tooling. Exam engine lands in Phase 3.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild>
@@ -40,8 +54,9 @@ export default function HomePage() {
           <FlaskConical className="size-4" />
           <AlertTitle>Approval-gated development</AlertTitle>
           <AlertDescription>
-            This project proceeds phase by phase. No product logic has been implemented yet beyond the
-            shell. Check <code>docs/DEVELOPMENT_ROADMAP.md</code> for the next phase.
+            This project proceeds phase by phase. No product logic has been
+            implemented yet beyond the shell. Check{" "}
+            <code>docs/DEVELOPMENT_ROADMAP.md</code> for the next phase.
           </AlertDescription>
         </Alert>
 
@@ -49,7 +64,7 @@ export default function HomePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <CheckCircle2 className="size-4 text-primary" /> Design System
+                <CheckCircle2 className="text-primary size-4" /> Design System
               </CardTitle>
               <CardDescription>Accessible primitives ready</CardDescription>
             </CardHeader>
@@ -72,16 +87,23 @@ export default function HomePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldCheck className="size-4 text-primary" /> Type Safety
+                <ShieldCheck className="text-primary size-4" /> Type Safety
               </CardTitle>
               <CardDescription>Strict TS + Zod at boundaries</CardDescription>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              <code className="rounded bg-muted px-1.5 py-0.5">lib/env.ts</code> validates env at boot.
+            <CardContent className="text-muted-foreground text-sm">
+              <code className="bg-muted rounded px-1.5 py-0.5">lib/env.ts</code>{" "}
+              validates env at boot.
               <br />
-              <code className="rounded bg-muted px-1.5 py-0.5">lib/utils.ts</code> cn helper.
+              <code className="bg-muted rounded px-1.5 py-0.5">
+                lib/utils.ts
+              </code>{" "}
+              cn helper.
               <br />
-              <code className="rounded bg-muted px-1.5 py-0.5">lib/db.ts</code> stub (Phase 3: Prisma).
+              <code className="bg-muted rounded px-1.5 py-0.5">
+                lib/db.ts
+              </code>{" "}
+              stub (Phase 3: Prisma).
             </CardContent>
           </Card>
           <Card>
@@ -90,7 +112,7 @@ export default function HomePage() {
               <CardDescription>18 phases, approval-gated</CardDescription>
             </CardHeader>
             <CardContent>
-              <ol className="list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+              <ol className="text-muted-foreground list-decimal space-y-1 pl-4 text-sm">
                 <li>Foundation \u2014 done</li>
                 <li>Auth & Users \u2014 next</li>
                 <li>Exam Engine</li>
@@ -103,11 +125,17 @@ export default function HomePage() {
         <Card>
           <CardHeader>
             <CardTitle>Health Check</CardTitle>
-            <CardDescription>API liveness probe for deployment & worker monitoring</CardDescription>
+            <CardDescription>
+              API liveness probe for deployment & worker monitoring
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center gap-3">
-            <code className="rounded bg-muted px-2 py-1 text-sm">GET /api/health</code>
-            <span className="text-sm text-muted-foreground">{'\u2192 { status: "ok" }'}</span>
+            <code className="bg-muted rounded px-2 py-1 text-sm">
+              GET /api/health
+            </code>
+            <span className="text-muted-foreground text-sm">
+              {'\u2192 { status: "ok" }'}
+            </span>
           </CardContent>
         </Card>
       </div>

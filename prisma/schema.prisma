@@ -1,12 +1,13 @@
 // PracticeHub Prisma schema — Phase 3: Exam Engine
-// NOTE: SQLite for local dev; switch to postgresql for prod (see ARCHITECTURE.md).
+// Local dev: SQLite (zero-config). Production: switch provider to postgresql and use DATABASE_URL postgres://...
+// See docs/DEPLOYMENT.md and docs/DATA_MODEL.md.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -162,8 +163,8 @@ model ExamVersion {
   examId       String
   exam         Exam          @relation("ExamVersions", fields: [examId], references: [id], onDelete: Cascade)
   version      Int
-  config       String        // JSON stringified ExamConfig (validated by Zod)
-  instructions String?       // JSON or markdown
+  config       Json          // ExamConfig (validated by Zod) — Json for queryability; fallback parsed as String on SQLite
+  instructions Json?
   sections     ExamSection[]
   attempts     ExamAttempt[]
   createdAt    DateTime      @default(now())
@@ -236,6 +237,7 @@ model QuestionAsset {
   type       String
   alt        String?
   order      Int      @default(0)
+  @@index([questionId])
 }
 
 model Answer {
@@ -243,7 +245,7 @@ model Answer {
   questionId        String   @unique
   question          Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   correctOptionId   String?
-  correctOptionIds  String   @default("[]") // JSON array string for MCQ
+  correctOptionIds  Json     @default("[]")
   numericAnswer     Float?
   explanation       String?
 }
@@ -269,7 +271,7 @@ model PaperUpload {
   owner         User            @relation(fields: [ownerId], references: [id])
   examId        String?
   exam          Exam?           @relation(fields: [examId], references: [id])
-  fileKey       String
+  fileKey       String          @unique
   fileName      String
   mimeType      String
   sizeBytes     Int
@@ -278,6 +280,7 @@ model PaperUpload {
   jobs          ProcessingJob[]
   draftQuestions DraftQuestion[]
   createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   @@index([ownerId, status])
   @@index([examId])
 }
@@ -289,12 +292,12 @@ model DraftQuestion {
   order              Int
   text               String
   type               QuestionType @default(SCQ)
-  options            String      @default("[]") // JSON: [{label,text}]
+  options            Json        @default("[]")
   correctOptionLabel String?
   explanation        String?
   marks              Float       @default(1)
   needsReview        Boolean     @default(false)
-  status             String      @default("DRAFT") // DRAFT | APPROVED | REJECTED
+  status             String      @default("DRAFT")
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
   @@index([paperUploadId, order])
@@ -307,7 +310,7 @@ model ProcessingJob {
   paperUpload   PaperUpload        @relation(fields: [paperUploadId], references: [id], onDelete: Cascade)
   status        UploadStatus       @default(PROCESSING)
   attempts      Int                @default(0)
-  logs          String             @default("[]") // JSON array string
+  logs          Json               @default("[]")
   failedReason  String?
   results       ExtractionResult[]
   createdAt     DateTime           @default(now())
@@ -320,9 +323,9 @@ model ExtractionResult {
   id         String        @id @default(cuid())
   jobId      String
   job        ProcessingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  raw        String?       // JSON
-  structured String?       // JSON
-  warnings   String?       // JSON
+  raw        Json?
+  structured Json?
+  warnings   Json?
   confidence Float?
   createdAt  DateTime      @default(now())
   @@index([jobId])
@@ -362,6 +365,7 @@ model AttemptAnswer {
   updatedAt        DateTime      @updatedAt
   @@unique([attemptId, questionId])
   @@index([attemptId])
+  @@index([questionId])
 }
 
 model ExamResult {
@@ -377,7 +381,7 @@ model ExamResult {
   unattempted Int
   negative    Float
   timeTakenMs Int
-  sectionWise String      // JSON
+  sectionWise Json
   createdAt   DateTime    @default(now())
 }
 
@@ -409,7 +413,6 @@ model Bookmark {
   @@id([userId, examId])
 }
 
-// Legacy placeholder — remove after verification
 model MigrationCheck {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())

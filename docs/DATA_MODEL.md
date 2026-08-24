@@ -318,21 +318,26 @@ model Bookmark {
 ## 4. State Machines
 
 ### Upload lifecycle
+
 ```
 UPLOADED -> PROCESSING -> OCR_PROCESSING -> EXTRACTING -> REVIEW_REQUIRED -> READY -> PUBLISHED
                      \-> FAILED (retry 3x -> FAILED)
 ```
+
 Transition enforced in service: `canTransition(from,to)`; illegal jumps throw.
 
 ### Attempt lifecycle
+
 ```
 CREATED -> IN_PROGRESS -> SUBMITTED
                  |-> EXPIRED (now > expiresAt on submit)
                  |-> ABANDONED (heartbeat timeout 24h no submit)
 ```
+
 `submittedAt` set once, idempotent. Score computed in transaction creating `ExamResult`.
 
 ### QuestionState (per AttemptAnswer)
+
 ```
 NOT_VISITED --visit--> NOT_ANSWERED --select--> ANSWERED --mark--> ANSWERED_MARKED
   |                       |-> MARKED (no answer, review)
@@ -379,4 +384,3 @@ NOT_VISITED --visit--> NOT_ANSWERED --select--> ANSWERED --mark--> ANSWERED_MARK
 
 - `Question` can exist detached: add nullable `bankExamId` vs `sectionId` OR separate `BankQuestion` table reusing same fields. Decision deferred to Phase 14+.
 - `Topic` many-to-many enables custom mock generation.
-

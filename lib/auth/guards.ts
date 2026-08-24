@@ -21,7 +21,8 @@ export async function requireAuth() {
 export async function requireRole(minRole: Role) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const userRole = (session.user as unknown as { role?: Role }).role ?? "STUDENT";
+  const userRole =
+    (session.user as unknown as { role?: Role }).role ?? "STUDENT";
   if (roleOrder[userRole] < roleOrder[minRole]) {
     redirect("/");
   }

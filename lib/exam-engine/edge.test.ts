@@ -11,16 +11,43 @@ describe("scoring edge cases", () => {
   });
   it("all bonus", () => {
     const qs = [
-      { questionId: "q1", sectionId: "s1", marks: 1, negativeMarks: 0, isBonus: true, isCancelled: false, correctOptionId: "a", selectedOptionId: "a" },
-      { questionId: "q2", sectionId: "s1", marks: 1, negativeMarks: 0.25, isBonus: true, isCancelled: false, correctOptionId: "a", selectedOptionId: "b" },
+      {
+        questionId: "q1",
+        sectionId: "s1",
+        marks: 1,
+        negativeMarks: 0,
+        isBonus: true,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "a",
+      },
+      {
+        questionId: "q2",
+        sectionId: "s1",
+        marks: 1,
+        negativeMarks: 0.25,
+        isBonus: true,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "b",
+      },
     ];
     const r = computeScore(qs);
     expect(r.maxScore).toBe(0);
-    expect(r.correct).toBe(1);
+    expect(r.correct).toBe(0); // bonus excluded from correct
   });
   it("all cancelled", () => {
     const qs = [
-      { questionId: "q1", sectionId: "s1", marks: 2, negativeMarks: 0.5, isBonus: false, isCancelled: true, correctOptionId: "a", selectedOptionId: "a" },
+      {
+        questionId: "q1",
+        sectionId: "s1",
+        marks: 2,
+        negativeMarks: 0.5,
+        isBonus: false,
+        isCancelled: true,
+        correctOptionId: "a",
+        selectedOptionId: "a",
+      },
     ];
     const r = computeScore(qs);
     expect(r.maxScore).toBe(0);
@@ -28,7 +55,16 @@ describe("scoring edge cases", () => {
   });
   it("mixed negative zero", () => {
     const qs = [
-      { questionId: "q1", sectionId: "s1", marks: 1, negativeMarks: 0, isBonus: false, isCancelled: false, correctOptionId: "a", selectedOptionId: "b" },
+      {
+        questionId: "q1",
+        sectionId: "s1",
+        marks: 1,
+        negativeMarks: 0,
+        isBonus: false,
+        isCancelled: false,
+        correctOptionId: "a",
+        selectedOptionId: "b",
+      },
     ];
     const r = computeScore(qs);
     expect(r.score).toBe(0);
@@ -38,9 +74,14 @@ describe("scoring edge cases", () => {
 
 describe("navigation edge", () => {
   it("free allows any", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cfg = { timing: { totalSec: 100 }, marking: { default: { marks: 1, negative: 0 }, bonusAllowed: true }, navigation: { mode: "free" as const } } as any;
-    expect(canNavigate({}, { sectionId: "s1", questionOrder: 0 }, cfg)).toBe(true);
+    const cfg = {
+      timing: { totalSec: 100 },
+      marking: { default: { marks: 1, negative: 0 }, bonusAllowed: true },
+      navigation: { mode: "free" as const },
+    } as unknown as never;
+    expect(canNavigate({}, { sectionId: "s1", questionOrder: 0 }, cfg)).toBe(
+      true
+    );
   });
   it("sequential logic", () => {
     expect(typeof canNavigate).toBe("function");

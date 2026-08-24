@@ -25,19 +25,26 @@ const MIN_CHARS_FOR_TEXT_PAGE = 50;
  * Extract text from a PDF buffer using unpdf (PDF.js serverless).
  * Preserves per-page text and page dimensions.
  */
-export async function extractPdfText(buffer: Buffer): Promise<ExtractionOutput> {
+export async function extractPdfText(
+  buffer: Buffer
+): Promise<ExtractionOutput> {
   const data = new Uint8Array(buffer);
   const pdf = await getDocumentProxy(data);
 
   // Extract per-page text
-  const { totalPages, text: raw } = await extractText(pdf, { mergePages: false });
+  const { totalPages, text: raw } = await extractText(pdf, {
+    mergePages: false,
+  });
   const perPageText = Array.isArray(raw) ? (raw as string[]) : [raw as string];
 
   // Meta (best-effort)
   let meta: Record<string, unknown> = {};
   try {
     const m = await getMeta(pdf);
-    meta = { ...(m.info as unknown as Record<string, unknown>), ...(m.metadata as unknown as Record<string, unknown>) };
+    meta = {
+      ...(m.info as unknown as Record<string, unknown>),
+      ...(m.metadata as unknown as Record<string, unknown>),
+    };
   } catch {
     // ignore
   }
@@ -77,7 +84,8 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractionOutput> 
   }
 
   const fullText = perPageText.join("\n\n");
-  const avgCharsPerPage = totalPages > 0 ? Math.round(totalChars / totalPages) : 0;
+  const avgCharsPerPage =
+    totalPages > 0 ? Math.round(totalChars / totalPages) : 0;
   const textCoverage = totalPages > 0 ? pagesWithText / totalPages : 0;
   // Heuristic: needs OCR if < 50% pages have meaningful text
   const needsOcr = textCoverage < 0.5;

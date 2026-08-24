@@ -4,7 +4,15 @@ import { validateExamConfig, type ExamConfig } from "../validation/exam.schema";
 
 export const publishInputSchema = z.object({
   title: z.string().min(3).max(200).optional(),
-  slug: z.string().min(3).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must be lowercase alphanumeric with hyphens").optional(),
+  slug: z
+    .string()
+    .min(3)
+    .max(100)
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "Slug must be lowercase alphanumeric with hyphens"
+    )
+    .optional(),
   organizationId: z.string().optional(),
   sectionName: z.string().min(1).max(100).optional().default("General"),
   config: z.any().optional(), // validated via validateExamConfig if provided
@@ -13,13 +21,15 @@ export const publishInputSchema = z.object({
 export type PublishInput = z.infer<typeof publishInputSchema>;
 
 function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/--+/g, "-")
-    .slice(0, 80)
-    .replace(/-+$/g, "") || "exam";
+  return (
+    input
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .replace(/--+/g, "-")
+      .slice(0, 80)
+      .replace(/-+$/g, "") || "exam"
+  );
 }
 
 export async function publishUpload(params: {
@@ -37,7 +47,8 @@ export async function publishUpload(params: {
   if (!upload) throw new Error("Upload not found");
   if (upload.ownerId !== ownerId) {
     const user = await prisma.user.findUnique({ where: { id: ownerId } });
-    if (!user || (user.role !== "ADMIN" && user.role !== "MODERATOR")) throw new Error("Forbidden");
+    if (!user || (user.role !== "ADMIN" && user.role !== "MODERATOR"))
+      throw new Error("Forbidden");
   }
 
   // Idempotency: if already published and has examId, return existing exam
@@ -53,7 +64,9 @@ export async function publishUpload(params: {
   if (upload.status !== "READY" && upload.status !== "REVIEW_REQUIRED") {
     // Allow REVIEW_REQUIRED only if drafts are approved?
     // For now require READY
-    throw new Error(`Upload must be READY to publish (current: ${upload.status}). Please approve all drafts first.`);
+    throw new Error(
+      `Upload must be READY to publish (current: ${upload.status}). Please approve all drafts first.`
+    );
   }
 
   const drafts = await prisma.draftQuestion.findMany({
@@ -62,15 +75,27 @@ export async function publishUpload(params: {
   });
   if (drafts.length === 0) throw new Error("No approved drafts to publish");
 
-  const pendingDrafts = await prisma.draftQuestion.count({ where: { paperUploadId, status: "DRAFT" } });
-  if (pendingDrafts > 0) throw new Error(`There are ${pendingDrafts} draft(s) still needing approval. Please approve or reject all before publishing.`);
+  const pendingDrafts = await prisma.draftQuestion.count({
+    where: { paperUploadId, status: "DRAFT" },
+  });
+  if (pendingDrafts > 0)
+    throw new Error(
+      `There are ${pendingDrafts} draft(s) still needing approval. Please approve or reject all before publishing.`
+    );
 
   // Determine title/slug
-  const baseTitle = parsed.title?.trim() || upload.fileName.replace(/\.pdf$/i, "").replace(/[-_]/g, " ").trim() || "Untitled Exam";
+  const baseTitle =
+    parsed.title?.trim() ||
+    upload.fileName
+      .replace(/\.pdf$/i, "")
+      .replace(/[-_]/g, " ")
+      .trim() ||
+    "Untitled Exam";
   let slug = parsed.slug?.trim() || slugify(baseTitle);
   // Ensure slug unique
   let attempt = 0;
   let finalSlug = slug;
+  // Pre-check loop; final uniqueness enforced by catch on P2002 below
   while (await prisma.exam.findUnique({ where: { slug: finalSlug } })) {
     attempt++;
     finalSlug = `${slug}-${attempt}`;
@@ -80,14 +105,25 @@ export async function publishUpload(params: {
 
   // Config: use provided or default
   const defaultConfig: ExamConfig = {
-    timing: { totalSec: Math.min(10800, Math.max(600, drafts.length * 90)), warningSec: 300 },
+    timing: {
+      totalSec: Math.min(10800, Math.max(600, drafts.length * 90)),
+      warningSec: 300,
+    },
     marking: { default: { marks: 1, negative: 0 }, bonusAllowed: true },
     navigation: { mode: "free" },
-    questionTypes: [...new Set(drafts.map(d => d.type))] as string[],
+    questionTypes: [...new Set(drafts.map((d) => d.type))] as string[],
   };
-  const configToUse = parsed.config ? validateExamConfig(parsed.config) : defaultConfig;
+  const configToUse = parsed.config
+    ? validateExamConfig(parsed.config)
+    : defaultConfig;
   const validatedConfig = validateExamConfig(configToUse);
 
+  if (parsed.organizationId) {
+    const org = await prisma.organization.findUnique({
+      where: { id: parsed.organizationId },
+    });
+    if (!org) throw new Error("Organization not found");
+  }
   const sectionName = parsed.sectionName ?? "General";
 
   // Transaction: create exam, version, section, questions
@@ -107,8 +143,8 @@ export async function publishUpload(params: {
       data: {
         examId: exam.id,
         version: 1,
-        config: JSON.stringify(validatedConfig),
-        instructions: null,
+        config: validatedConfig as unknown as never,
+        instructions: undefined,
       },
     });
 
@@ -122,8 +158,23 @@ export async function publishUpload(params: {
 
     for (let i = 0; i < drafts.length; i++) {
       const d = drafts[i]!;
-      const options = JSON.parse(d.options) as Array<{ label: string; text: string }>;
-      const questionType = (["SCQ","MCQ","NUMERIC","TRUE_FALSE","PASSAGE","IMAGE_BASED"] as const).includes(d.type as never) ? d.type : "SCQ";
+      const options = (
+        typeof d.options === "string"
+          ? JSON.parse(d.options as string)
+          : (d.options as unknown)
+      ) as Array<{ label: string; text: string }>;
+      const questionType = (
+        [
+          "SCQ",
+          "MCQ",
+          "NUMERIC",
+          "TRUE_FALSE",
+          "PASSAGE",
+          "IMAGE_BASED",
+        ] as const
+      ).includes(d.type as never)
+        ? d.type
+        : "SCQ";
       const question = await tx.question.create({
         data: {
           sectionId: section.id,
@@ -140,7 +191,8 @@ export async function publishUpload(params: {
       let correctOptionId: string | null = null;
       for (let optIdx = 0; optIdx < options.length; optIdx++) {
         const opt = options[optIdx]!;
-        const isCorrect = !!d.correctOptionLabel && opt.label === d.correctOptionLabel;
+        const isCorrect =
+          !!d.correctOptionLabel && opt.label === d.correctOptionLabel;
         const created = await tx.questionOption.create({
           data: {
             questionId: question.id,
@@ -184,12 +236,28 @@ export async function publishUpload(params: {
     });
 
     // Update job logs
-    const job = await tx.processingJob.findFirst({ where: { paperUploadId }, orderBy: { createdAt: "desc" } });
+    const job = await tx.processingJob.findFirst({
+      where: { paperUploadId },
+      orderBy: { createdAt: "desc" },
+    });
     if (job) {
       let logs: Array<{ ts: string; level: string; msg: string }> = [];
-      try { logs = JSON.parse(job.logs); } catch {}
-      logs.push({ ts: new Date().toISOString(), level: "info", msg: `Published ${drafts.length} questions as exam ${slug} (version 1)` });
-      await tx.processingJob.update({ where: { id: job.id }, data: { logs: JSON.stringify(logs) } });
+      try {
+        logs =
+          typeof job.logs === "string"
+            ? JSON.parse(job.logs as string)
+            : (job.logs as typeof logs);
+        if (!Array.isArray(logs)) logs = [];
+      } catch {}
+      logs.push({
+        ts: new Date().toISOString(),
+        level: "info",
+        msg: `Published ${drafts.length} questions as exam ${slug} (version 1)`,
+      });
+      await tx.processingJob.update({
+        where: { id: job.id },
+        data: { logs: logs as unknown as never },
+      });
     }
 
     return { exam: updatedExam, version };

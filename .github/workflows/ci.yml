@@ -16,13 +16,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npx prisma validate
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run format:check
       - run: npm test
       - run: npm run build
         env:
           DATABASE_URL: "file:./dev.db"
-          NEXTAUTH_SECRET: "ci-secret-do-not-use"
-          AUTH_SECRET: "ci-secret-do-not-use"
+          NEXTAUTH_SECRET: "ci-secret-do-not-use-must-be-32-chars-long!!"
+          AUTH_SECRET: "ci-secret-do-not-use-must-be-32-chars-long!!"
           NEXTAUTH_URL: "http://localhost:3000"

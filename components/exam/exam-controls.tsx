@@ -11,9 +11,16 @@ interface Props {
   canNext: boolean;
 }
 
-export function ExamControls({ onPrevious, onClear, onMarkNext, onSaveNext, canPrevious, canNext }: Props) {
+export function ExamControls({
+  onPrevious,
+  onClear,
+  onMarkNext,
+  onSaveNext,
+  canPrevious,
+  canNext,
+}: Props) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-card p-3">
+    <div className="bg-card flex flex-wrap items-center justify-between gap-2 border-t p-3">
       <div className="flex gap-2">
         <Button variant="outline" onClick={onPrevious} disabled={!canPrevious}>
           Previous

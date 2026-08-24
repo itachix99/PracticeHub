@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-export function LoginForm({ callbackUrl = "/dashboard" }: { callbackUrl?: string }) {
+export function LoginForm({
+  callbackUrl = "/dashboard",
+}: {
+  callbackUrl?: string;
+}) {
   const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");

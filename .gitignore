@@ -46,5 +46,5 @@ pnpm-debug.log*
 Thumbs.db
 *.tsbuildinfo
 
-# tesseract
-*.traineddata
+# tesseract - eng.traineddata is 5MB, downloaded via scripts/download-tess.sh, not committed
+*.traineddata.local/

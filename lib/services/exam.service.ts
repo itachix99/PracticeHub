@@ -20,7 +20,12 @@ export async function createExamWithVersion(params: {
       negativeMarks?: number;
       isBonus?: boolean;
       isCancelled?: boolean;
-      options: Array<{ label: string; text: string; order: number; isCorrect: boolean }>;
+      options: Array<{
+        label: string;
+        text: string;
+        order: number;
+        isCorrect: boolean;
+      }>;
       explanation?: string;
     }>;
   }>;
@@ -41,13 +46,20 @@ export async function createExamWithVersion(params: {
       data: {
         examId: exam.id,
         version: 1,
-        config: JSON.stringify(parsedConfig),
-        instructions: params.instructions ? JSON.stringify({ text: params.instructions }) : null,
+        config: parsedConfig as unknown as never,
+        instructions: params.instructions
+          ? ({ text: params.instructions } as unknown as never)
+          : undefined,
       },
     });
     for (const sec of params.sections) {
       const section = await tx.examSection.create({
-        data: { versionId: version.id, name: sec.name, order: sec.order, durationSec: sec.durationSec },
+        data: {
+          versionId: version.id,
+          name: sec.name,
+          order: sec.order,
+          durationSec: sec.durationSec,
+        },
       });
       for (const q of sec.questions) {
         const question = await tx.question.create({
@@ -65,21 +77,38 @@ export async function createExamWithVersion(params: {
         });
         for (const opt of q.options) {
           await tx.questionOption.create({
-            data: { questionId: question.id, label: opt.label, order: opt.order, text: opt.text, isCorrect: opt.isCorrect },
+            data: {
+              questionId: question.id,
+              label: opt.label,
+              order: opt.order,
+              text: opt.text,
+              isCorrect: opt.isCorrect,
+            },
           });
         }
         const correct = q.options.find((o) => o.isCorrect);
         if (correct) {
-          const correctOpt = await tx.questionOption.findFirst({ where: { questionId: question.id, label: correct.label } });
+          const correctOpt = await tx.questionOption.findFirst({
+            where: { questionId: question.id, label: correct.label },
+          });
           if (correctOpt) {
-            await tx.answer.create({ data: { questionId: question.id, correctOptionId: correctOpt.id, explanation: q.explanation } });
+            await tx.answer.create({
+              data: {
+                questionId: question.id,
+                correctOptionId: correctOpt.id,
+                explanation: q.explanation,
+              },
+            });
           }
         }
       }
     }
-    const updated = await tx.exam.update({ where: { id: exam.id }, data: { currentVersionId: version.id, isPublished: true } });
+    const updated = await tx.exam.update({
+      where: { id: exam.id },
+      data: { currentVersionId: version.id, isPublished: true },
+    });
     return { exam: updated, version };
-  });
+  }, { timeout: 30000, maxWait: 10000 });
 }
 
 export interface PublishedExamsFilters {
@@ -92,7 +121,7 @@ export interface PublishedExamsFilters {
 
 export async function getPublishedExams(filters: PublishedExamsFilters = {}) {
   const { q, organization, sort = "latest", page = 1, limit = 9 } = filters;
-  const take = Math.min(50, Math.max(1, limit));
+  const take = Math.min(50, Math.max(1, Math.min(50, limit)));
   const currentPage = Math.max(1, page);
   const skip = (currentPage - 1) * take;
 
@@ -136,7 +165,13 @@ export async function getPublishedExams(filters: PublishedExamsFilters = {}) {
       where: where as never,
       include: {
         organization: true,
-        currentVersion: { include: { sections: { include: { questions: { include: { options: true } } } } } },
+        currentVersion: {
+          include: {
+            sections: {
+              include: { questions: { include: { options: true } } },
+            },
+          },
+        },
       },
       orderBy,
       skip,
@@ -161,7 +196,19 @@ export async function getExamBySlug(slug: string) {
       organization: true,
       currentVersion: {
         include: {
-          sections: { orderBy: { order: "asc" }, include: { questions: { orderBy: { order: "asc" }, include: { options: { orderBy: { order: "asc" } }, answer: true, assets: true } } } },
+          sections: {
+            orderBy: { order: "asc" },
+            include: {
+              questions: {
+                orderBy: { order: "asc" },
+                include: {
+                  options: { orderBy: { order: "asc" } },
+                  answer: true,
+                  assets: true,
+                },
+              },
+            },
+          },
         },
       },
     },

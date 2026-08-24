@@ -38,13 +38,26 @@ export async function getStudentStats(userId: string): Promise<StudentStats> {
     orderBy: { createdAt: "desc" },
   });
   const totalAttempts = attempts.length;
-  const submitted = attempts.filter(a => a.status === "SUBMITTED" && a.result);
-  const percentages = submitted.map(a => a.result!.percentage).filter(p => typeof p === "number");
-  const avgPercentage = percentages.length ? Math.round(percentages.reduce((s,v)=>s+v,0)/percentages.length) : null;
+  const submitted = attempts.filter(
+    (a) => a.status === "SUBMITTED" && a.result
+  );
+  const percentages = submitted
+    .map((a) => a.result!.percentage)
+    .filter((p) => typeof p === "number");
+  const avgPercentage = percentages.length
+    ? Math.round(percentages.reduce((s, v) => s + v, 0) / percentages.length)
+    : null;
   const bestPercentage = percentages.length ? Math.max(...percentages) : null;
-  const bestScore = submitted.length ? Math.max(...submitted.map(a=>a.result!.score)) : null;
-  const totalTimeMs = submitted.reduce((s,a)=>s+(a.result?.timeTakenMs ?? 0),0);
-  const lastAttemptAt = attempts[0]?.createdAt ? attempts[0].createdAt.toISOString() : null;
+  const bestScore = submitted.length
+    ? Math.max(...submitted.map((a) => a.result!.score))
+    : null;
+  const totalTimeMs = submitted.reduce(
+    (s, a) => s + (a.result?.timeTakenMs ?? 0),
+    0
+  );
+  const lastAttemptAt = attempts[0]?.createdAt
+    ? attempts[0].createdAt.toISOString()
+    : null;
   return {
     totalAttempts,
     submittedAttempts: submitted.length,
@@ -56,7 +69,10 @@ export async function getStudentStats(userId: string): Promise<StudentStats> {
   };
 }
 
-export async function getRecentAttempts(userId: string, limit = 5): Promise<RecentAttempt[]> {
+export async function getRecentAttempts(
+  userId: string,
+  limit = 5
+): Promise<RecentAttempt[]> {
   const attempts = await prisma.examAttempt.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
@@ -67,7 +83,11 @@ export async function getRecentAttempts(userId: string, limit = 5): Promise<Rece
     },
   });
   return attempts.map((a) => {
-    const exam = (a as unknown as { version: { exam?: { title: string; slug: string } | null } }).version?.exam;
+    const exam = (
+      a as unknown as {
+        version: { exam?: { title: string; slug: string } | null };
+      }
+    ).version?.exam;
     const fallbackExamId = a.examId;
     return {
       id: a.id,
@@ -86,11 +106,18 @@ export async function getRecentAttempts(userId: string, limit = 5): Promise<Rece
 }
 
 export async function getUploaderStats(userId: string): Promise<UploaderStats> {
-  const uploads = await prisma.paperUpload.findMany({ where: { ownerId: userId } });
+  const uploads = await prisma.paperUpload.findMany({
+    where: { ownerId: userId },
+  });
   const uploadsByStatus: Record<string, number> = {};
-  for (const u of uploads) uploadsByStatus[u.status] = (uploadsByStatus[u.status] ?? 0) + 1;
-  const totalDrafts = await prisma.draftQuestion.count({ where: { paperUpload: { ownerId: userId } } });
-  const totalPublishedExams = await prisma.exam.count({ where: { ownerId: userId, isPublished: true } });
+  for (const u of uploads)
+    uploadsByStatus[u.status] = (uploadsByStatus[u.status] ?? 0) + 1;
+  const totalDrafts = await prisma.draftQuestion.count({
+    where: { paperUpload: { ownerId: userId } },
+  });
+  const totalPublishedExams = await prisma.exam.count({
+    where: { ownerId: userId, isPublished: true },
+  });
   return {
     totalUploads: uploads.length,
     uploadsByStatus,
@@ -108,14 +135,14 @@ export async function getDailyAttempts(userId: string, days = 7) {
   });
   // Group by date string YYYY-MM-DD
   const map = new Map<string, number>();
-  for (let i=0;i<days;i++) {
+  for (let i = 0; i < days; i++) {
     const d = new Date();
-    d.setDate(d.getDate() - (days-1-i));
-    const key = d.toISOString().slice(0,10);
+    d.setDate(d.getDate() - (days - 1 - i));
+    const key = d.toISOString().slice(0, 10);
     map.set(key, 0);
   }
   for (const a of attempts) {
-    const key = a.createdAt.toISOString().slice(0,10);
+    const key = a.createdAt.toISOString().slice(0, 10);
     map.set(key, (map.get(key) ?? 0) + 1);
   }
   return Array.from(map.entries()).map(([date, count]) => ({ date, count }));

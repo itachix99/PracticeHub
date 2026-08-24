@@ -24,4 +24,3 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ## Approval-Gated Workflow
 
 Do not proceed to next phase without explicit `APPROVE`. See `DEVELOPMENT_ROADMAP.md`.
-

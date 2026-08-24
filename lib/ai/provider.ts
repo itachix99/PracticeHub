@@ -12,7 +12,8 @@ export function resolveAiProvider(): AiProvider {
   const forced = process.env.AI_PROVIDER as AiProvider | undefined;
   if (forced === "mock") return "mock";
   if (forced === "openai" && process.env.OPENAI_API_KEY) return "openai";
-  if (forced === "anthropic" && process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (forced === "anthropic" && process.env.ANTHROPIC_API_KEY)
+    return "anthropic";
   if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   return "mock";
@@ -25,18 +26,45 @@ export const questionOptionSchema = z.object({
 });
 
 export const extractedQuestionSchema = z.object({
-  text: z.string().min(1).describe("Question stem verbatim from paper, no hallucination"),
-  type: z.enum(["SCQ", "MCQ", "NUMERIC", "TRUE_FALSE", "PASSAGE"]).default("SCQ").describe("Question type"),
-  options: z.array(questionOptionSchema).max(6).default([]).describe("Options in order, empty for NUMERIC"),
-  correctOptionLabel: z.string().optional().describe("Correct option label if explicitly marked in source (e.g. Ans: A), else omit"),
-  explanation: z.string().optional().describe("Explanation if present in source"),
+  text: z
+    .string()
+    .min(1)
+    .describe("Question stem verbatim from paper, no hallucination"),
+  type: z
+    .enum(["SCQ", "MCQ", "NUMERIC", "TRUE_FALSE", "PASSAGE"])
+    .default("SCQ")
+    .describe("Question type"),
+  options: z
+    .array(questionOptionSchema)
+    .max(6)
+    .default([])
+    .describe("Options in order, empty for NUMERIC"),
+  correctOptionLabel: z
+    .string()
+    .optional()
+    .describe(
+      "Correct option label if explicitly marked in source (e.g. Ans: A), else omit"
+    ),
+  explanation: z
+    .string()
+    .optional()
+    .describe("Explanation if present in source"),
   marks: z.number().optional().describe("Marks if mentioned"),
 });
 
 export const aiExtractionSchema = z.object({
-  questions: z.array(extractedQuestionSchema).describe("Extracted questions verbatim, do not invent"),
-  needsReview: z.boolean().describe("true if any extraction is ambiguous, incomplete, or low confidence"),
-  warnings: z.array(z.string()).optional().describe("Warnings for ambiguous cases"),
+  questions: z
+    .array(extractedQuestionSchema)
+    .describe("Extracted questions verbatim, do not invent"),
+  needsReview: z
+    .boolean()
+    .describe(
+      "true if any extraction is ambiguous, incomplete, or low confidence"
+    ),
+  warnings: z
+    .array(z.string())
+    .optional()
+    .describe("Warnings for ambiguous cases"),
 });
 
 export type AiExtractionOutput = z.infer<typeof aiExtractionSchema>;
@@ -86,8 +114,10 @@ ${fullText.slice(0, 15000)}
     // anthropic package not installed yet, but we handle dynamically; if not installed, fallback
     try {
       const mod = await import("@ai-sdk/anthropic");
-      const anthropicFn = (mod as unknown as { anthropic: (m:string)=>unknown }).anthropic;
-        const { object } = await generateObject({
+      const anthropicFn = (
+        mod as unknown as { anthropic: (m: string) => unknown }
+      ).anthropic;
+      const { object } = await generateObject({
         model: anthropicFn("claude-3-5-sonnet-20241022") as unknown as any,
         schema: aiExtractionSchema,
         prompt,
@@ -95,7 +125,9 @@ ${fullText.slice(0, 15000)}
       });
       return object;
     } catch {
-      throw new Error("Anthropic provider not available, install @ai-sdk/anthropic");
+      throw new Error(
+        "Anthropic provider not available, install @ai-sdk/anthropic"
+      );
     }
   }
 

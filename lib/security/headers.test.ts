@@ -9,13 +9,17 @@ describe("securityHeaders", () => {
     expect(securityHeaders["Strict-Transport-Security"]).toContain("max-age");
   });
   it("has CSP with frame-ancestors none", () => {
-    expect(securityHeaders["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+    expect(securityHeaders["Content-Security-Policy"]).toContain(
+      "frame-ancestors 'none'"
+    );
   });
   it("has nosniff", () => {
     expect(securityHeaders["X-Content-Type-Options"]).toBe("nosniff");
   });
   it("has referrer policy", () => {
-    expect(securityHeaders["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
+    expect(securityHeaders["Referrer-Policy"]).toBe(
+      "strict-origin-when-cross-origin"
+    );
   });
   it("has permissions policy", () => {
     expect(securityHeaders["Permissions-Policy"]).toContain("camera");

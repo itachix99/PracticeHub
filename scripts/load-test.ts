@@ -43,8 +43,12 @@ async function simulateLoad(concurrency = 20, iterations = 5) {
   const maxAvg = Math.max(...results);
   const min = Math.min(...results);
   console.log(`[load] elapsed wall: ${elapsed.toFixed(0)}ms`);
-  console.log(`[load] avg per 500q scoring: ${avg.toFixed(2)}ms min ${min.toFixed(2)} max ${maxAvg.toFixed(2)}`);
-  console.log(`[load] throughput: ${((concurrency * iterations) / (elapsed / 1000)).toFixed(1)} ops/sec`);
+  console.log(
+    `[load] avg per 500q scoring: ${avg.toFixed(2)}ms min ${min.toFixed(2)} max ${maxAvg.toFixed(2)}`
+  );
+  console.log(
+    `[load] throughput: ${((concurrency * iterations) / (elapsed / 1000)).toFixed(1)} ops/sec`
+  );
   if (avg > 50) {
     console.error("[load] FAIL avg >50ms");
     process.exit(1);

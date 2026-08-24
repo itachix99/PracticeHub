@@ -5,6 +5,7 @@
 ## 1. Vercel (Recommended)
 
 ### Prerequisites
+
 - GitHub repo connected to Vercel (import project)
 - Postgres database — choose one:
   - **Vercel Postgres** (Storage → Create → Postgres)
@@ -13,16 +14,16 @@
 
 ### Environment Variables (Vercel Dashboard → Settings → Environment Variables)
 
-| Key | Example | Required |
-|-----|---------|----------|
-| DATABASE_URL | postgres://default:xxx@xxx-pooler.vercel-storage.com/verceldb?sslmode=require | Yes |
-| DIRECT_URL | postgres://default:xxx@xxx.vercel-storage.com/verceldb?sslmode=require | If pooled |
-| NEXTAUTH_SECRET | openssl rand -base64 32 | Yes |
-| AUTH_SECRET | same as above | Yes |
-| NEXTAUTH_URL | https://your-app.vercel.app | Yes |
-| R2_ACCOUNT_ID / R2_* | — | For uploads (prod) |
-| OPENAI_API_KEY | sk-... | Optional |
-| AZURE_DI_ENDPOINT / KEY | — | Optional |
+| Key                     | Example                                                                       | Required           |
+| ----------------------- | ----------------------------------------------------------------------------- | ------------------ |
+| DATABASE_URL            | postgres://default:xxx@xxx-pooler.vercel-storage.com/verceldb?sslmode=require | Yes                |
+| DIRECT_URL              | postgres://default:xxx@xxx.vercel-storage.com/verceldb?sslmode=require        | If pooled          |
+| NEXTAUTH_SECRET         | openssl rand -base64 32                                                       | Yes                |
+| AUTH_SECRET             | same as above                                                                 | Yes                |
+| NEXTAUTH_URL            | https://your-app.vercel.app                                                   | Yes                |
+| R2_ACCOUNT_ID / R2_*    | —                                                                             | For uploads (prod) |
+| OPENAI_API_KEY          | sk-...                                                                        | Optional           |
+| AZURE_DI_ENDPOINT / KEY | —                                                                             | Optional           |
 
 ### Switch Prisma to PostgreSQL (one-time)
 

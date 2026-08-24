@@ -51,7 +51,11 @@ describe("payload size 500q", () => {
   it("config generation is small", () => {
     const config = {
       timing: { totalSec: 10800, warningSec: 600, sectionTimers: false },
-      marking: { perSection: false, default: { marks: 1, negative: 0.25 }, bonusAllowed: false },
+      marking: {
+        perSection: false,
+        default: { marks: 1, negative: 0.25 },
+        bonusAllowed: false,
+      },
       navigation: { mode: "free" as const },
     };
     const json = JSON.stringify(config);

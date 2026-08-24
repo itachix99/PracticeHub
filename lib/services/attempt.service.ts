@@ -22,7 +22,10 @@ export async function createAttempt(params: {
     },
   });
   // Pre-create AttemptAnswer rows for all questions in version
-  const sections = await prisma.examSection.findMany({ where: { versionId: params.versionId }, include: { questions: true } });
+  const sections = await prisma.examSection.findMany({
+    where: { versionId: params.versionId },
+    include: { questions: true },
+  });
   const allQuestions = sections.flatMap((s) => s.questions);
   if (allQuestions.length > 0) {
     await prisma.attemptAnswer.createMany({
@@ -46,48 +49,101 @@ export async function getAttemptSnapshot(attemptId: string) {
   return attempt;
 }
 
-export async function saveAttemptAnswers(attemptId: string, answers: Array<{ questionId: string; selectedOptionId: string | null; state: QuestionState; timeSpentMs?: number }>) {
-  const attempt = await prisma.examAttempt.findUnique({ where: { id: attemptId } });
+export async function saveAttemptAnswers(
+  attemptId: string,
+  answers: Array<{
+    questionId: string;
+    selectedOptionId: string | null;
+    state: QuestionState;
+    timeSpentMs?: number;
+  }>
+) {
+  const attempt = await prisma.examAttempt.findUnique({
+    where: { id: attemptId },
+  });
   if (!attempt) throw new Error("Attempt not found");
-  if (attempt.status !== "IN_PROGRESS") throw new Error("Attempt not in progress");
+  if (attempt.status !== "IN_PROGRESS")
+    throw new Error("Attempt not in progress");
   if (new Date() >= attempt.expiresAt) {
     // auto-expire
-    await prisma.examAttempt.update({ where: { id: attemptId }, data: { status: "EXPIRED" } });
+    await prisma.examAttempt.update({
+      where: { id: attemptId },
+      data: { status: "EXPIRED" },
+    });
     throw new Error("Attempt expired");
   }
   // Upsert each answer
   await prisma.$transaction(
     answers.map((a) =>
       prisma.attemptAnswer.upsert({
-        where: { attemptId_questionId: { attemptId, questionId: a.questionId } },
-        update: { selectedOptionId: a.selectedOptionId, state: a.state, timeSpentMs: a.timeSpentMs ?? 0 },
-        create: { attemptId, questionId: a.questionId, selectedOptionId: a.selectedOptionId, state: a.state, timeSpentMs: a.timeSpentMs ?? 0 },
+        where: {
+          attemptId_questionId: { attemptId, questionId: a.questionId },
+        },
+        update: {
+          selectedOptionId: a.selectedOptionId,
+          state: a.state,
+          timeSpentMs: a.timeSpentMs ?? 0,
+        },
+        create: {
+          attemptId,
+          questionId: a.questionId,
+          selectedOptionId: a.selectedOptionId,
+          state: a.state,
+          timeSpentMs: a.timeSpentMs ?? 0,
+        },
       })
     )
   );
   // touch updatedAt
-  await prisma.examAttempt.update({ where: { id: attemptId }, data: { updatedAt: new Date() } });
+  await prisma.examAttempt.update({
+    where: { id: attemptId },
+    data: { updatedAt: new Date() },
+  });
   return true;
 }
 
-export async function submitAttempt(attemptId: string, _idempotencyKey?: string) {
+export async function submitAttempt(
+  attemptId: string,
+  _idempotencyKey?: string
+) {
   void _idempotencyKey;
   const attempt = await prisma.examAttempt.findUnique({
     where: { id: attemptId },
-    include: { answers: true, version: { include: { sections: { include: { questions: { include: { answer: true } } } } } }, result: true },
+    include: {
+      answers: true,
+      version: {
+        include: {
+          sections: { include: { questions: { include: { answer: true } } } },
+        },
+      },
+      result: true,
+    },
   });
   if (!attempt) throw new Error("Attempt not found");
   // Idempotent: if already submitted, return existing
   if (attempt.status === "SUBMITTED" && attempt.result) {
-    const existing = await prisma.examResult.findUnique({ where: { attemptId } });
+    const existing = await prisma.examResult.findUnique({
+      where: { attemptId },
+    });
     return { attempt, result: existing, alreadySubmitted: true };
   }
-  if (attempt.status !== "IN_PROGRESS") throw new Error(`Cannot submit from status ${attempt.status}`);
+  if (attempt.status !== "IN_PROGRESS")
+    throw new Error(`Cannot submit from status ${attempt.status}`);
   // Check expiry — if now > expiresAt, mark expired but still compute score?
   const now = new Date();
   const isExpired = now >= attempt.expiresAt;
   // Build scored questions
-  const questionMap = new Map<string, { marks: number; negativeMarks: number; isBonus: boolean; isCancelled: boolean; correctOptionId: string | null; sectionId: string }>();
+  const questionMap = new Map<
+    string,
+    {
+      marks: number;
+      negativeMarks: number;
+      isBonus: boolean;
+      isCancelled: boolean;
+      correctOptionId: string | null;
+      sectionId: string;
+    }
+  >();
   for (const sec of attempt.version.sections) {
     for (const q of sec.questions) {
       questionMap.set(q.id, {
@@ -114,12 +170,26 @@ export async function submitAttempt(attemptId: string, _idempotencyKey?: string)
       selectedOptionId: a.selectedOptionId,
     };
   });
-  let config: { marking?: { default: { marks: number; negative: number }; perSection?: Record<string, { marks: number; negative: number }> } } = {};
-  try { config = JSON.parse(attempt.version.config); } catch {}
+  const rawConfig = attempt.version.config as unknown;
+  let config: {
+    marking?: {
+      default: { marks: number; negative: number };
+      perSection?: Record<string, { marks: number; negative: number }>;
+    };
+  } = {};
+  try {
+    config =
+      typeof rawConfig === "string"
+        ? JSON.parse(rawConfig)
+        : (rawConfig as typeof config);
+  } catch {}
   const defaultMarking = config.marking?.default ?? { marks: 1, negative: 0 };
   const perSection = config.marking?.perSection;
   const resultScore = computeScore(scored as never, perSection, defaultMarking);
-  const timeTakenMs = Math.min(now.getTime() - attempt.startedAt.getTime(), attempt.expiresAt.getTime() - attempt.startedAt.getTime());
+  const timeTakenMs = Math.min(
+    now.getTime() - attempt.startedAt.getTime(),
+    attempt.expiresAt.getTime() - attempt.startedAt.getTime()
+  );
   // Create result in transaction + update attempt
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.examResult.findUnique({ where: { attemptId } });
@@ -136,7 +206,7 @@ export async function submitAttempt(attemptId: string, _idempotencyKey?: string)
         unattempted: resultScore.unattempted,
         negative: resultScore.negative,
         timeTakenMs,
-        sectionWise: JSON.stringify(resultScore.sectionWise),
+        sectionWise: resultScore.sectionWise as unknown as never,
       },
     });
     await tx.examAttempt.update({
@@ -145,6 +215,8 @@ export async function submitAttempt(attemptId: string, _idempotencyKey?: string)
     });
     return created;
   });
-  const updatedAttempt = await prisma.examAttempt.findUnique({ where: { id: attemptId } });
+  const updatedAttempt = await prisma.examAttempt.findUnique({
+    where: { id: attemptId },
+  });
   return { attempt: updatedAttempt, result, alreadySubmitted: false };
 }

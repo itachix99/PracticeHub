@@ -10,7 +10,7 @@ const credentialsSchema = z.object({
   password: z.string().min(6),
 });
 
-// In-memory login attempt tracking (per-process). For multi-instance prod use Redis.
+// In-memory login attempt tracking (per-process). Use Redis in production via lib/security/rate-limit if needed.
 type AttemptInfo = { count: number; lockUntil?: number; lastAt: number };
 const loginAttempts = new Map<string, AttemptInfo>();
 const MAX_ATTEMPTS = 5;
@@ -37,7 +37,11 @@ function recordFailure(email: string) {
   }
   const nextCount = info.count + 1;
   if (nextCount >= MAX_ATTEMPTS) {
-    loginAttempts.set(key, { count: nextCount, lastAt: now, lockUntil: now + LOCK_MS });
+    loginAttempts.set(key, {
+      count: nextCount,
+      lastAt: now,
+      lockUntil: now + LOCK_MS,
+    });
   } else {
     loginAttempts.set(key, { count: nextCount, lastAt: now });
   }
@@ -48,6 +52,9 @@ function recordSuccess(email: string) {
 }
 
 const BCRYPT_ROUNDS = 12;
+// Dummy hash for timing-equalization when user not found (precomputed bcrypt hash of "dummy_password_for_timing")
+const DUMMY_HASH =
+  "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyniLR6p6/AfBi";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -69,6 +76,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (isLocked(email)) return null;
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.password) {
+          // Timing equalization to prevent user enumeration
+          await bcrypt.compare(password, DUMMY_HASH);
           recordFailure(email);
           return null;
         }
@@ -78,7 +87,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
         recordSuccess(email);
-        return { id: user.id, email: user.email, name: user.name, image: user.image, role: user.role } as unknown as Record<string, unknown> as never;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+        } as unknown as Record<string, unknown> as never;
       },
     }),
   ],
@@ -86,14 +101,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         const u = user as unknown as { role?: string; id?: string };
-        (token as unknown as Record<string, unknown>).role = u.role ?? "STUDENT";
+        (token as unknown as Record<string, unknown>).role =
+          u.role ?? "STUDENT";
         (token as unknown as Record<string, unknown>).id = u.id;
       } else if (token.email) {
         if (!(token as unknown as Record<string, unknown>).role) {
-          const dbUser = await prisma.user.findUnique({ where: { email: token.email as string }, select: { id: true, role: true } });
+          const dbUser = await prisma.user.findUnique({
+            where: { email: token.email as string },
+            select: { id: true, role: true },
+          });
           if (dbUser) {
             (token as unknown as Record<string, unknown>).role = dbUser.role;
             (token as unknown as Record<string, unknown>).id = dbUser.id;
+          } else {
+            // User deleted/disabled -> invalidate token
+            return null as unknown as typeof token;
           }
         }
       }
@@ -101,9 +123,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        const t = token as unknown as { role?: string; id?: string; sub?: string };
-        (session.user as unknown as Record<string, unknown>).role = t.role ?? "STUDENT";
-        (session.user as unknown as Record<string, unknown>).id = t.id ?? t.sub ?? "";
+        const t = token as unknown as {
+          role?: string;
+          id?: string;
+          sub?: string;
+        };
+        (session.user as unknown as Record<string, unknown>).role =
+          t.role ?? "STUDENT";
+        (session.user as unknown as Record<string, unknown>).id =
+          t.id ?? t.sub ?? "";
       }
       return session;
     },

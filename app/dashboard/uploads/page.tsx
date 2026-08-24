@@ -11,7 +11,9 @@ export default async function UploadsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Upload Papers</h1>
-          <p className="text-sm text-muted-foreground">Secure pipeline • private storage • job statuses</p>
+          <p className="text-muted-foreground text-sm">
+            Secure pipeline • private storage • job statuses
+          </p>
         </div>
         <Badge variant="secondary">Phase 7</Badge>
       </div>

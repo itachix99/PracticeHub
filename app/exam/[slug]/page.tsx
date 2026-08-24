@@ -4,14 +4,22 @@ import { ExamSimulator } from "@/components/exam/exam-simulator";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = await params;
   const exam = await prisma.exam.findUnique({ where: { slug } });
   if (!exam) return { title: "Exam not found" };
   return { title: `${exam.title} — Exam` };
 }
 
-export default async function ExamPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ExamPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = await params;
   const exam = await prisma.exam.findUnique({
     where: { slug },
@@ -23,7 +31,10 @@ export default async function ExamPage({ params }: { params: Promise<{ slug: str
             include: {
               questions: {
                 orderBy: { order: "asc" },
-                include: { options: { orderBy: { order: "asc" } }, answer: true },
+                include: {
+                  options: { orderBy: { order: "asc" } },
+                  answer: true,
+                },
               },
             },
           },
@@ -32,17 +43,32 @@ export default async function ExamPage({ params }: { params: Promise<{ slug: str
     },
   });
   if (!exam || !exam.currentVersion) return notFound();
-  let config: { timing: { totalSec: number; warningSec?: number }; marking?: { default: { marks: number; negative: number } } };
+  let config: {
+    timing: { totalSec: number; warningSec?: number };
+    marking?: { default: { marks: number; negative: number } };
+  };
   try {
-    config = JSON.parse(exam.currentVersion.config);
+    const raw = exam.currentVersion.config as unknown;
+    config =
+      typeof raw === "string"
+        ? JSON.parse(raw as string)
+        : (raw as typeof config);
   } catch {
     config = { timing: { totalSec: 3600 } };
   }
   let instructions: string | undefined;
   try {
-    instructions = exam.currentVersion.instructions ? JSON.parse(exam.currentVersion.instructions).text : undefined;
+    const rawInstr = exam.currentVersion.instructions as unknown;
+    if (rawInstr) {
+      const parsed =
+        typeof rawInstr === "string"
+          ? JSON.parse(rawInstr as string)
+          : (rawInstr as { text?: string });
+      instructions = (parsed as { text?: string }).text;
+    }
   } catch {
-    instructions = exam.currentVersion.instructions ?? undefined;
+    instructions =
+      (exam.currentVersion.instructions as unknown as string) ?? undefined;
   }
   const examData = {
     examId: exam.id,
@@ -65,7 +91,13 @@ export default async function ExamPage({ params }: { params: Promise<{ slug: str
         isCancelled: q.isCancelled,
         sectionId: sec.id,
         correctOptionId: q.answer?.correctOptionId ?? null,
-        options: q.options.map((o) => ({ id: o.id, label: o.label, text: o.text, order: o.order, isCorrect: o.isCorrect })),
+        options: q.options.map((o) => ({
+          id: o.id,
+          label: o.label,
+          text: o.text,
+          order: o.order,
+          isCorrect: o.isCorrect,
+        })),
       })),
     })),
   };

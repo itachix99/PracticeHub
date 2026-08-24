@@ -11,20 +11,63 @@ function applyHeaders(res: NextResponse): NextResponse {
 }
 
 function clientIp(req: NextRequest): string {
+  const trustProxy =
+    process.env.TRUST_PROXY === "1" || process.env.VERCEL === "1";
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
+  if (trustProxy && xff) return xff.split(",")[0]!.trim();
   const xri = req.headers.get("x-real-ip");
   if (xri) return xri.trim();
+  if (xff) return xff.split(",")[0]!.trim();
   return "unknown";
 }
 
+function isCsrfSafe(req: NextRequest): boolean {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS")
+    return true;
+  if (!req.nextUrl.pathname.startsWith("/api/")) return true;
+  // Allow NextAuth CSRF (it handles its own)
+  if (req.nextUrl.pathname.startsWith("/api/auth")) return true;
+  const origin = req.headers.get("origin");
+  const host = req.headers.get("host");
+  if (!origin || !host) return true; // non-browser or same-site fetch without origin -> allow (SameSite handles)
+  try {
+    const originHost = new URL(origin).host;
+    if (originHost === host) return true;
+    // Allow Vercel preview host mismatch? Strict: reject
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeCallbackUrl(url: string, origin: string): string {
+  try {
+    const parsed = new URL(url, origin);
+    // Only allow same-origin relative paths
+    if (parsed.origin !== new URL(origin).origin) return "/dashboard";
+    if (parsed.pathname.startsWith("//") || parsed.pathname.includes("\\"))
+      return "/dashboard";
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch {
+    return "/dashboard";
+  }
+}
+
 export function middleware(req: NextRequest) {
+  // CSRF check for state-changing API requests
+  if (!isCsrfSafe(req)) {
+    const res = NextResponse.json(
+      { error: "CSRF origin mismatch" },
+      { status: 403 }
+    );
+    return applyHeaders(res);
+  }
+
   const { pathname } = req.nextUrl;
 
   // --- Rate limiting for API routes ---
   if (pathname.startsWith("/api/")) {
     const ip = clientIp(req);
-    // Stricter for auth endpoints
     let limit = 60;
     let windowMs = 60_000;
     if (pathname.startsWith("/api/auth")) {
@@ -37,24 +80,33 @@ export function middleware(req: NextRequest) {
       limit = 30;
       windowMs = 60_000;
     }
-    const key = `${ip}:${pathname}`;
+    // Normalize key: strip cuid/id suffix to prevent key proliferation
+    const normalizedPath = pathname.replace(/\/c[a-z0-9]{20,}/g, "/:id");
+    const key = `${ip}:${normalizedPath}`;
     const rl = checkRateLimit(key, limit, windowMs);
     if (!rl.allowed) {
-      const res = NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
-      for (const [k, v] of Object.entries(rateLimitHeaders(rl.remaining, rl.resetAt, limit))) res.headers.set(k, v);
-      for (const [k, v] of Object.entries(securityHeaders)) res.headers.set(k, v);
-      res.headers.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+      const res = NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+      for (const [k, v] of Object.entries(
+        rateLimitHeaders(rl.remaining, rl.resetAt, limit)
+      ))
+        res.headers.set(k, v);
+      for (const [k, v] of Object.entries(securityHeaders))
+        res.headers.set(k, v);
+      res.headers.set(
+        "Retry-After",
+        String(Math.ceil((rl.resetAt - Date.now()) / 1000))
+      );
       return res;
     }
-    // Attach rate-limit headers to successful response later
     const res = NextResponse.next();
-    for (const [k, v] of Object.entries(rateLimitHeaders(rl.remaining, rl.resetAt, limit))) res.headers.set(k, v);
+    for (const [k, v] of Object.entries(
+      rateLimitHeaders(rl.remaining, rl.resetAt, limit)
+    ))
+      res.headers.set(k, v);
     for (const [k, v] of Object.entries(securityHeaders)) res.headers.set(k, v);
-    // Continue to auth checks, but keep headers (need to merge — we return res at end after auth logic for non-API? For API we already return res, but auth redirect not needed)
-    // For /api routes, auth is handled per-route (401 JSON), so just add headers and continue
-    // To avoid double header set, we will handle API early return already; but for non-early path we need to preserve.
-    // Simple: if API route passed rate limit, proceed with headers already set
-    // Fall through to auth checks with that response as base
     const authRes = handleAuth(req, res);
     return authRes;
   }
@@ -87,7 +139,9 @@ function handleAuth(req: NextRequest, base?: NextResponse): NextResponse {
     const isProtected = pathname.startsWith("/dashboard");
     if (isProtected && !isLoggedIn) {
       const loginUrl = new URL("/login", req.url);
-      loginUrl.searchParams.set("callbackUrl", pathname);
+      const rawCb = req.nextUrl.pathname + req.nextUrl.search;
+      const safeCb = sanitizeCallbackUrl(rawCb, req.url);
+      loginUrl.searchParams.set("callbackUrl", safeCb);
       res = NextResponse.redirect(loginUrl);
     } else {
       res = base ?? NextResponse.next();

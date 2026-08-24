@@ -15,54 +15,108 @@ import { Button } from "@/components/ui/button";
 import { computeScore } from "@/lib/exam-engine/scoring";
 import type { QuestionState } from "@/lib/exam-engine/types";
 
-interface ExamOption { id: string; label: string; text: string; order: number; isCorrect: boolean; }
-interface ExamQuestion { id: string; text: string; order: number; marks: number; negativeMarks: number; isBonus: boolean; isCancelled: boolean; options: ExamOption[]; correctOptionId: string | null; sectionId: string; }
-interface ExamSection { id: string; name: string; order: number; questions: ExamQuestion[]; }
-interface ExamData { examId: string; versionId: string; slug: string; title: string; config: { timing: { totalSec: number; warningSec?: number }; marking?: { default: { marks: number; negative: number }; perSection?: Record<string, { marks: number; negative: number }> } }; instructions?: string; sections: ExamSection[]; }
-interface Props { exam: ExamData; }
+interface ExamOption {
+  id: string;
+  label: string;
+  text: string;
+  order: number;
+  isCorrect: boolean;
+}
+interface ExamQuestion {
+  id: string;
+  text: string;
+  order: number;
+  marks: number;
+  negativeMarks: number;
+  isBonus: boolean;
+  isCancelled: boolean;
+  options: ExamOption[];
+  correctOptionId: string | null;
+  sectionId: string;
+}
+interface ExamSection {
+  id: string;
+  name: string;
+  order: number;
+  questions: ExamQuestion[];
+}
+interface ExamData {
+  examId: string;
+  versionId: string;
+  slug: string;
+  title: string;
+  config: {
+    timing: { totalSec: number; warningSec?: number };
+    marking?: {
+      default: { marks: number; negative: number };
+      perSection?: Record<string, { marks: number; negative: number }>;
+    };
+  };
+  instructions?: string;
+  sections: ExamSection[];
+}
+interface Props {
+  exam: ExamData;
+}
 
-const LS_ATTEMPT_KEY = (slug: string) => `ph:attempt:${slug}`;
+const LS_ATTEMPT_KEY = (examId: string, versionId: string) =>
+  `ph:attempt:${examId}:${versionId}`;
 const LS_ANSWERS_KEY = (attemptId: string) => `ph:answers:${attemptId}`;
 const LS_STATES_KEY = (attemptId: string) => `ph:states:${attemptId}`;
 
 export function ExamSimulator({ exam }: Props) {
   const router = useRouter();
-  const storageSlug = exam.examId;
+  const storageSlugKeyKey = `${exam.examId}:${exam.versionId}`;
   const [started, setStarted] = React.useState(false);
   const [attemptId, setAttemptId] = React.useState<string | null>(null);
   const [expiresAt, setExpiresAt] = React.useState<Date | null>(null);
-  const [activeSectionId, setActiveSectionId] = React.useState(exam.sections[0]?.id ?? "");
-  const activeSection = React.useMemo(() => exam.sections.find((s) => s.id === activeSectionId) ?? exam.sections[0], [exam.sections, activeSectionId]);
-  const [activeQuestionId, setActiveQuestionId] = React.useState<string | null>(activeSection?.questions[0]?.id ?? null);
-  const [answers, setAnswers] = React.useState<Record<string, string | null>>({});
-  const [states, setStates] = React.useState<Record<string, QuestionState>>(() => {
-    const init: Record<string, QuestionState> = {};
-    for (const sec of exam.sections) for (const q of sec.questions) init[q.id] = "NOT_VISITED";
-    if (activeSection?.questions[0]) init[activeSection.questions[0].id] = "NOT_ANSWERED";
-    return init;
-  });
+  const [activeSectionId, setActiveSectionId] = React.useState(
+    exam.sections[0]?.id ?? ""
+  );
+  const activeSection = React.useMemo(
+    () =>
+      exam.sections.find((s) => s.id === activeSectionId) ?? exam.sections[0],
+    [exam.sections, activeSectionId]
+  );
+  const [activeQuestionId, setActiveQuestionId] = React.useState<string | null>(
+    activeSection?.questions[0]?.id ?? null
+  );
+  const [answers, setAnswers] = React.useState<Record<string, string | null>>(
+    {}
+  );
+  const [states, setStates] = React.useState<Record<string, QuestionState>>(
+    () => {
+      const init: Record<string, QuestionState> = {};
+      for (const sec of exam.sections)
+        for (const q of sec.questions) init[q.id] = "NOT_VISITED";
+      if (activeSection?.questions[0])
+        init[activeSection.questions[0].id] = "NOT_ANSWERED";
+      return init;
+    }
+  );
   const [submitted, setSubmitted] = React.useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = React.useState(false);
   const [isCreating, setIsCreating] = React.useState(false);
   const [isRecovering, setIsRecovering] = React.useState(true);
 
   const totalSec = exam.config.timing.totalSec;
-  const warningSec = exam.config.timing.warningSec ?? 300;
-  // Timer: if expiresAt exists, derive remaining from it, else use totalSec
-  const initialRemaining = React.useMemo(() => {
-    if (expiresAt) return Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
-    return totalSec;
-  }, [expiresAt, totalSec]);
-  const { remaining, formatted } = useTimer(started ? initialRemaining : totalSec, () => {
-    // auto-submit on expiry
-    if (attemptId && !submitted) {
-      handleSubmit(true);
-    } else {
-      setShowSubmitConfirm(true);
-    }
-  });
+  // warningSec available via exam.config.timing.warningSec
+  const { remaining, formatted } = useTimer(
+    started ? totalSec : totalSec,
+    () => {
+      if (attemptId && !submitted) {
+        handleSubmit(true);
+      } else {
+        setShowSubmitConfirm(true);
+      }
+    },
+    { expiresAt: started ? expiresAt : null }
+  );
 
-  const allQuestions = React.useMemo(() => exam.sections.flatMap((s) => s.questions), [exam.sections]);
+  const allQuestions = React.useMemo(
+    () => exam.sections.flatMap((s) => s.questions),
+    [exam.sections]
+  );
   const globalIndexMap = React.useMemo(() => {
     const map = new Map<string, number>();
     allQuestions.forEach((q, idx) => map.set(q.id, idx + 1));
@@ -75,11 +129,16 @@ export function ExamSimulator({ exam }: Props) {
     }
     return activeSection?.questions[0] ?? null;
   }, [exam.sections, activeQuestionId, activeSection]);
-  const activeGlobalNumber = activeQuestion ? (globalIndexMap.get(activeQuestion.id) ?? 1) : 1;
+  const activeGlobalNumber = activeQuestion
+    ? (globalIndexMap.get(activeQuestion.id) ?? 1)
+    : 1;
 
   // Recovery on mount
   React.useEffect(() => {
-    const storedAttemptId = typeof window !== "undefined" ? localStorage.getItem(LS_ATTEMPT_KEY(storageSlug)) : null;
+    const storedAttemptId =
+      typeof window !== "undefined"
+        ? localStorage.getItem(LS_ATTEMPT_KEY(exam.examId, exam.versionId))
+        : null;
     if (!storedAttemptId) {
       setIsRecovering(false);
       return;
@@ -92,7 +151,8 @@ export function ExamSimulator({ exam }: Props) {
       })
       .then((data) => {
         const attempt = data.attempt;
-        if (!attempt || attempt.status !== "IN_PROGRESS") throw new Error("not in progress");
+        if (!attempt || attempt.status !== "IN_PROGRESS")
+          throw new Error("not in progress");
         // Check expiry
         const exp = new Date(attempt.expiresAt);
         if (exp.getTime() <= Date.now()) throw new Error("expired");
@@ -101,12 +161,18 @@ export function ExamSimulator({ exam }: Props) {
         // Restore answers/states from server
         const serverAnswers: Record<string, string | null> = {};
         const serverStates: Record<string, QuestionState> = {};
-        for (const a of attempt.answers as Array<{ questionId: string; selectedOptionId: string | null; state: QuestionState }>) {
+        for (const a of attempt.answers as Array<{
+          questionId: string;
+          selectedOptionId: string | null;
+          state: QuestionState;
+        }>) {
           serverAnswers[a.questionId] = a.selectedOptionId;
           serverStates[a.questionId] = a.state;
         }
         // Merge with local (local newer if exists) — for now server wins except we keep local if server missing
-        const localAnswersRaw = localStorage.getItem(LS_ANSWERS_KEY(attempt.id));
+        const localAnswersRaw = localStorage.getItem(
+          LS_ANSWERS_KEY(attempt.id)
+        );
         const localStatesRaw = localStorage.getItem(LS_STATES_KEY(attempt.id));
         let mergedAnswers = serverAnswers;
         let mergedStates = serverStates;
@@ -127,16 +193,18 @@ export function ExamSimulator({ exam }: Props) {
         const lastActive = localStorage.getItem(`ph:active:${attempt.id}`);
         if (lastActive && mergedStates[lastActive]) {
           setActiveQuestionId(lastActive);
-          const sec = exam.sections.find((s) => s.questions.some((q) => q.id === lastActive));
+          const sec = exam.sections.find((s) =>
+            s.questions.some((q) => q.id === lastActive)
+          );
           if (sec) setActiveSectionId(sec.id);
         }
       })
       .catch(() => {
         // No valid recovery, clear
-        localStorage.removeItem(LS_ATTEMPT_KEY(storageSlug));
+        localStorage.removeItem(LS_ATTEMPT_KEY(exam.examId, exam.versionId));
       })
       .finally(() => setIsRecovering(false));
-  }, [storageSlug, exam.sections]);
+  }, [storageSlugKeyKey, exam.examId, exam.versionId, exam.sections]);
 
   // Persist active question
   React.useEffect(() => {
@@ -151,7 +219,10 @@ export function ExamSimulator({ exam }: Props) {
     setStates((prev) => {
       if (prev[activeQuestionId] === "NOT_VISITED") {
         const hasAnswer = !!answers[activeQuestionId];
-        return { ...prev, [activeQuestionId]: hasAnswer ? "ANSWERED" : "NOT_ANSWERED" };
+        return {
+          ...prev,
+          [activeQuestionId]: hasAnswer ? "ANSWERED" : "NOT_ANSWERED",
+        };
       }
       return prev;
     });
@@ -248,19 +319,26 @@ export function ExamSimulator({ exam }: Props) {
       const res = await fetch("/api/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ examId: exam.examId, versionId: exam.versionId }),
+        body: JSON.stringify({
+          examId: exam.examId,
+          versionId: exam.versionId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create attempt");
       const attempt = data.attempt;
       setAttemptId(attempt.id);
       setExpiresAt(new Date(attempt.expiresAt));
-      localStorage.setItem(LS_ATTEMPT_KEY(storageSlug), attempt.id);
+      localStorage.setItem(
+        LS_ATTEMPT_KEY(exam.examId, exam.versionId),
+        attempt.id
+      );
       // Initialize states from server (already NOT_VISITED, first visited)
       // Keep current states but ensure first question marked visited
       setStates((prev) => {
         const first = exam.sections[0]?.questions[0]?.id;
-        if (first && prev[first] === "NOT_VISITED") return { ...prev, [first]: "NOT_ANSWERED" };
+        if (first && prev[first] === "NOT_VISITED")
+          return { ...prev, [first]: "NOT_ANSWERED" };
         return prev;
       });
       setStarted(true);
@@ -293,13 +371,17 @@ export function ExamSimulator({ exam }: Props) {
   };
 
   const navigateTo = (questionId: string) => {
-    for (const sec of exam.sections) if (sec.questions.some((q) => q.id === questionId)) setActiveSectionId(sec.id);
+    for (const sec of exam.sections)
+      if (sec.questions.some((q) => q.id === questionId))
+        setActiveSectionId(sec.id);
     setActiveQuestionId(questionId);
   };
 
   const goNext = () => {
     if (!activeQuestion || !activeSection) return;
-    const idx = activeSection!.questions.findIndex((q) => q.id === activeQuestion.id);
+    const idx = activeSection!.questions.findIndex(
+      (q) => q.id === activeQuestion.id
+    );
     if (idx + 1 < activeSection!.questions.length) {
       setActiveQuestionId(activeSection!.questions[idx + 1]!.id);
     } else {
@@ -314,7 +396,9 @@ export function ExamSimulator({ exam }: Props) {
 
   const goPrev = () => {
     if (!activeQuestion || !activeSection) return;
-    const idx = activeSection!.questions.findIndex((q) => q.id === activeQuestion.id);
+    const idx = activeSection!.questions.findIndex(
+      (q) => q.id === activeQuestion.id
+    );
     if (idx - 1 >= 0) {
       setActiveQuestionId(activeSection!.questions[idx - 1]!.id);
     } else {
@@ -322,7 +406,9 @@ export function ExamSimulator({ exam }: Props) {
       if (secIdx - 1 >= 0) {
         const prevSec = exam.sections[secIdx - 1]!;
         setActiveSectionId(prevSec.id);
-        setActiveQuestionId(prevSec.questions[prevSec.questions.length - 1]?.id ?? null);
+        setActiveQuestionId(
+          prevSec.questions[prevSec.questions.length - 1]?.id ?? null
+        );
       }
     }
   };
@@ -333,7 +419,8 @@ export function ExamSimulator({ exam }: Props) {
       if (hasAnswer) {
         setStates((prev) => {
           const cur = prev[activeQuestionId] ?? "NOT_VISITED";
-          if (cur === "MARKED" || cur === "ANSWERED_MARKED") return { ...prev, [activeQuestionId]: "ANSWERED_MARKED" };
+          if (cur === "MARKED" || cur === "ANSWERED_MARKED")
+            return { ...prev, [activeQuestionId]: "ANSWERED_MARKED" };
           return { ...prev, [activeQuestionId]: "ANSWERED" };
         });
       }
@@ -362,12 +449,16 @@ export function ExamSimulator({ exam }: Props) {
     try {
       const res = await fetch(`/api/attempts/${attemptId}/submit`, {
         method: "POST",
-        headers: { "Idempotency-Key": attemptId, "Content-Type": "application/json" },
+        headers: {
+          "Idempotency-Key": attemptId,
+          "Content-Type": "application/json",
+        },
       });
       const data = await res.json();
-      if (!res.ok && !data.result) throw new Error(data.error || "Submit failed");
+      if (!res.ok && !data.result)
+        throw new Error(data.error || "Submit failed");
       // Clear recovery keys on success
-      localStorage.removeItem(LS_ATTEMPT_KEY(storageSlug));
+      localStorage.removeItem(LS_ATTEMPT_KEY(exam.examId, exam.versionId));
       localStorage.removeItem(LS_ANSWERS_KEY(attemptId!));
       localStorage.removeItem(LS_STATES_KEY(attemptId!));
       setShowSubmitConfirm(false);
@@ -381,30 +472,56 @@ export function ExamSimulator({ exam }: Props) {
     }
   };
 
-  const paletteItems = activeSection ? activeSection.questions.map((q) => ({ id: q.id, number: globalIndexMap.get(q.id) ?? q.order + 1, state: states[q.id] ?? "NOT_VISITED" })) : [];
+  const paletteItems = activeSection
+    ? activeSection.questions.map((q) => ({
+        id: q.id,
+        number: globalIndexMap.get(q.id) ?? q.order + 1,
+        state: states[q.id] ?? "NOT_VISITED",
+      }))
+    : [];
   const canPrev = (() => {
     if (!activeQuestion || !activeSection) return false;
-    const qIdx = activeSection!.questions.findIndex((q) => q.id === activeQuestion.id);
+    const qIdx = activeSection!.questions.findIndex(
+      (q) => q.id === activeQuestion.id
+    );
     if (qIdx > 0) return true;
     const secIdx = exam.sections.findIndex((s) => s.id === activeSection!.id);
     return secIdx > 0;
   })();
   const canNext = (() => {
     if (!activeQuestion || !activeSection) return false;
-    const qIdx = activeSection!.questions.findIndex((q) => q.id === activeQuestion.id);
+    const qIdx = activeSection!.questions.findIndex(
+      (q) => q.id === activeQuestion.id
+    );
     if (qIdx + 1 < activeSection!.questions.length) return true;
     const secIdx = exam.sections.findIndex((s) => s.id === activeSection!.id);
     return secIdx + 1 < exam.sections.length;
   })();
 
   if (isRecovering) {
-    return <div className="container mx-auto p-8 text-center text-sm text-muted-foreground">Loading exam...</div>;
+    return (
+      <div className="text-muted-foreground container mx-auto p-8 text-center text-sm">
+        Loading exam...
+      </div>
+    );
   }
 
   if (!started) {
     const totalQuestions = allQuestions.length;
     const minutes = Math.round(totalSec / 60);
-    return <InstructionsScreen title={exam.title} instructions={exam.instructions} totalQuestions={totalQuestions} totalMinutes={minutes} sections={exam.sections.map((s) => ({ name: s.name, count: s.questions.length }))} onStart={createAttempt} />;
+    return (
+      <InstructionsScreen
+        title={exam.title}
+        instructions={exam.instructions}
+        totalQuestions={totalQuestions}
+        totalMinutes={minutes}
+        sections={exam.sections.map((s) => ({
+          name: s.name,
+          count: s.questions.length,
+        }))}
+        onStart={createAttempt}
+      />
+    );
   }
 
   if (submitted) {
@@ -418,22 +535,62 @@ export function ExamSimulator({ exam }: Props) {
       correctOptionId: q.correctOptionId,
       selectedOptionId: answers[q.id] ?? null,
     }));
-    const result = computeScore(scored as never, exam.config.marking?.perSection, exam.config.marking?.default ?? { marks: 2, negative: 0.5 });
+    const result = computeScore(
+      scored as never,
+      exam.config.marking?.perSection,
+      exam.config.marking?.default ?? { marks: 2, negative: 0.5 }
+    );
     return (
       <div className="container mx-auto max-w-4xl px-4 py-8">
         <Card>
-          <CardHeader><CardTitle>Exam Submitted</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Exam Submitted</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-              <div><p className="text-muted-foreground">Score</p><p className="text-2xl font-bold">{result.score} / {result.maxScore}</p></div>
-              <div><p className="text-muted-foreground">Attempted</p><p className="text-2xl font-bold">{result.attempted} / {allQuestions.length}</p></div>
-              <div><p className="text-muted-foreground">Correct</p><p className="text-2xl font-bold">{result.correct}</p></div>
-              <div><p className="text-muted-foreground">Incorrect</p><p className="text-2xl font-bold">{result.incorrect}</p></div>
+              <div>
+                <p className="text-muted-foreground">Score</p>
+                <p className="text-2xl font-bold">
+                  {result.score} / {result.maxScore}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Attempted</p>
+                <p className="text-2xl font-bold">
+                  {result.attempted} / {allQuestions.length}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Correct</p>
+                <p className="text-2xl font-bold">{result.correct}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Incorrect</p>
+                <p className="text-2xl font-bold">{result.incorrect}</p>
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground">Server-authoritative result saved. {attemptId ? `Attempt ${attemptId.slice(0, 8)}…` : "Preview"} Phase 6 will show full breakdown.</p>
+            <p className="text-muted-foreground text-sm">
+              Server-authoritative result saved.{" "}
+              {attemptId ? `Attempt ${attemptId.slice(0, 8)}…` : "Preview"}{" "}
+              Phase 6 will show full breakdown.
+            </p>
             <div className="flex gap-2">
-              <Button onClick={() => { localStorage.removeItem(LS_ATTEMPT_KEY(storageSlug)); window.location.reload(); }}>Retake</Button>
-              <Button variant="outline" onClick={() => (window.location.href = "/exams")}>Back to Library</Button>
+              <Button
+                onClick={() => {
+                  localStorage.removeItem(
+                    LS_ATTEMPT_KEY(exam.examId, exam.versionId)
+                  );
+                  window.location.reload();
+                }}
+              >
+                Retake
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => (window.location.href = "/exams")}
+              >
+                Back to Library
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -442,32 +599,100 @@ export function ExamSimulator({ exam }: Props) {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-muted/20">
-      <ExamHeader title={exam.title} remaining={formatted} remainingSec={remaining} warningSec={warningSec} />
-      <SectionTabs sections={exam.sections.map((s) => ({ id: s.id, name: s.name, order: s.order }))} activeId={activeSectionId} onChange={(id) => { setActiveSectionId(id); const sec = exam.sections.find((s) => s.id === id); if (sec) setActiveQuestionId(sec.questions[0]?.id ?? null); }} />
+    <div className="bg-muted/20 flex min-h-[calc(100vh-3.5rem)] flex-col">
+      <ExamHeader
+        title={exam.title}
+        remaining={formatted}
+        remainingSec={remaining}
+        warningSec={exam.config.timing.warningSec ?? 300}
+      />
+      <SectionTabs
+        sections={exam.sections.map((s) => ({
+          id: s.id,
+          name: s.name,
+          order: s.order,
+        }))}
+        activeId={activeSectionId}
+        onChange={(id) => {
+          setActiveSectionId(id);
+          const sec = exam.sections.find((s) => s.id === id);
+          if (sec) setActiveQuestionId(sec.questions[0]?.id ?? null);
+        }}
+      />
       <div className="flex flex-1 flex-col lg:flex-row">
         <div className="flex flex-1 flex-col gap-4 p-4">
-          {activeQuestion ? <QuestionViewer questionNumber={activeGlobalNumber} questionText={activeQuestion.text} options={activeQuestion.options.map((o) => ({ id: o.id, label: o.label, text: o.text }))} selectedOptionId={answers[activeQuestion.id] ?? null} onSelect={selectOption} /> : <Card><CardContent className="p-6">No question</CardContent></Card>}
-          <ExamControls onPrevious={goPrev} onClear={clearResponse} onMarkNext={markAndNext} onSaveNext={saveAndNext} canPrevious={canPrev} canNext={canNext} />
-          <div className="flex justify-end"><Button variant="destructive" onClick={() => setShowSubmitConfirm(true)} disabled={isCreating}>{isCreating ? "Starting..." : "Submit Exam"}</Button></div>
+          {activeQuestion ? (
+            <QuestionViewer
+              questionNumber={activeGlobalNumber}
+              questionText={activeQuestion.text}
+              options={activeQuestion.options.map((o) => ({
+                id: o.id,
+                label: o.label,
+                text: o.text,
+              }))}
+              selectedOptionId={answers[activeQuestion.id] ?? null}
+              onSelect={selectOption}
+            />
+          ) : (
+            <Card>
+              <CardContent className="p-6">No question</CardContent>
+            </Card>
+          )}
+          <ExamControls
+            onPrevious={goPrev}
+            onClear={clearResponse}
+            onMarkNext={markAndNext}
+            onSaveNext={saveAndNext}
+            canPrevious={canPrev}
+            canNext={canNext}
+          />
+          <div className="flex justify-end">
+            <Button
+              variant="destructive"
+              onClick={() => setShowSubmitConfirm(true)}
+              disabled={isCreating}
+            >
+              {isCreating ? "Starting..." : "Submit Exam"}
+            </Button>
+          </div>
         </div>
-        <aside className="w-full border-t bg-card p-4 lg:w-80 lg:border-l lg:border-t-0">
-          <QuestionPalette items={paletteItems} activeId={activeQuestionId} onSelect={navigateTo} />
-          <div className="mt-6 rounded-md border bg-muted/50 p-3 text-sm">
+        <aside className="bg-card w-full border-t p-4 lg:w-80 lg:border-t-0 lg:border-l">
+          <QuestionPalette
+            items={paletteItems}
+            activeId={activeQuestionId}
+            onSelect={navigateTo}
+          />
+          <div className="bg-muted/50 mt-6 rounded-md border p-3 text-sm">
             <p className="font-medium">Time: {formatted}</p>
-            <p className="text-xs text-muted-foreground">Syncs every 15s + on change. Refresh to test recovery.</p>
-            {attemptId && <p className="mt-1 text-[11px] text-muted-foreground">Attempt {attemptId.slice(0, 8)}…</p>}
+            <p className="text-muted-foreground text-xs">
+              Syncs every 15s + on change. Refresh to test recovery.
+            </p>
+            {attemptId && (
+              <p className="text-muted-foreground mt-1 text-[11px]">
+                Attempt {attemptId.slice(0, 8)}…
+              </p>
+            )}
           </div>
         </aside>
       </div>
       {showSubmitConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <Card className="w-full max-w-md">
-            <CardHeader><CardTitle>Submit Exam?</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Submit Exam?</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm">Attempted {Object.values(answers).filter(Boolean).length} / {allQuestions.length}. Idempotent submit — safe to retry.</p>
+              <p className="text-sm">
+                Attempted {Object.values(answers).filter(Boolean).length} /{" "}
+                {allQuestions.length}. Idempotent submit — safe to retry.
+              </p>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>Cancel</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSubmitConfirm(false)}
+                >
+                  Cancel
+                </Button>
                 <Button onClick={() => handleSubmit(false)}>Submit</Button>
               </div>
             </CardContent>
