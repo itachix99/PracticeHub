@@ -9,6 +9,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/practicehub?schema=public"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/practicehub?schema=public"
+      NEXTAUTH_SECRET: "ci-secret-do-not-use-must-be-32-chars-long!!"
+      AUTH_SECRET: "ci-secret-do-not-use-must-be-32-chars-long!!"
+      NEXTAUTH_URL: "http://localhost:3000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,8 +29,3 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
-        env:
-          DATABASE_URL: "file:./dev.db"
-          NEXTAUTH_SECRET: "ci-secret-do-not-use-must-be-32-chars-long!!"
-          AUTH_SECRET: "ci-secret-do-not-use-must-be-32-chars-long!!"
-          NEXTAUTH_URL: "http://localhost:3000"
