@@ -11,7 +11,10 @@ export interface StoredFile {
   size: number;
 }
 
-const UPLOAD_DIR = path.join(process.cwd(), "storage", "uploads");
+const UPLOAD_DIR =
+  process.env.VERCEL === "1"
+    ? path.join("/tmp", "storage", "uploads")
+    : path.join(process.cwd(), "storage", "uploads");
 
 export async function ensureUploadDir() {
   await fs.mkdir(UPLOAD_DIR, { recursive: true });
